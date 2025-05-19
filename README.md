@@ -12,6 +12,6 @@ The results of the evaluation are stored in a `.csv` file with the specified nam
 The visualization is performed using a Streamlit web app. This is the command to launch it:
 
 ```
-$ streamlit run display.py [OPTIONS] display.py <evaluation_file.csv> [ARGS]
+$ streamlit run [OPTIONS] display.py display.py <evaluation_file.csv> [ARGS]
 ```
 ![alt text](images/screenshot.png)

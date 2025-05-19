@@ -18,70 +18,48 @@ def color_generator(categories, label='cluster', palette='crest'):
             legend=alt.Legend(title="Cluster")
          )
 
-if __name__ == '__main__':
-  if len(argv) > 2:
-    st.write("Usage: python display.py [filename]")
-    st.write("If no filename is provided, the default file 'provisional.csv' will be used.")
-  filename = argv[1] if len(argv) > 1 else 'provisional.csv'
+def bar_leaderboard(df, metric, colors_cluster):
+    """
+    Generate a bar chart for the leaderboard.
+    """
+    top = 1.1 * df[metric].max()
+    bottom = 0.9 * df[metric].min()
 
-  df = pd.read_csv(filename)
-  colors_cluster = color_generator(df['cluster'].unique(), palette='viridis')
-  df['datetime'] = pd.to_datetime(df['datetime'])
-
-  st.title('ARCHER - Machine Translation Evaluation Results')
-  st.logo('images/archer.png', icon_image='images/archer-short.png', link='http://archer.prhlt.upv.es/')
-
-  #################
-  # LEADER BOARD
-  #################
-  with st.sidebar:
-    st.header('Leader board')
-    leaderborad = df[['position','name', 'cluster']].copy()
-    st.table(leaderborad.sort_values('position').set_index('position'))
-
-  ##################
-  # FILTERS
-  ##################
-  # Select main metric
-  metric = st.selectbox(
-      'Select the metric to display',
-      ('BLEU', 'TER')
-  ).lower()
-
-  # Range of clusters
-  # num_clusters = max(df['cluster'])
-  # best_cluster, worse_cluster = st.slider("Displayed clusters", 1, num_clusters, (1, max(df['cluster'])))
-  # df = df[(df['cluster'] >= best_cluster) & (df['cluster'] <= worse_cluster)]
-
-  #################################
-  # CHARTS
-  #################################
-  bar_tab, scatter_tab, cluster_tab = st.tabs(['Leader board', 'Quality vs Time', 'Clusters average'])
-
-  with bar_tab:
-    bar = (
-        alt.Chart(df)
-          .mark_bar()
-          .encode(
-            x=alt.X('name:N', sort=None, title='Participant'),
-            y=alt.Y(f'{metric}:Q', title=f'{metric.upper()} Score'),
-            color=colors_cluster,
-            tooltip=['name','cluster',f'{metric}']
-          )
-          .properties(title=f'{metric.upper()} by Participant', width=700, height=400)
+    # Create a conditional rule definition
+    rule = alt.Chart(df[df['comment'] == 'Baseline']).mark_rule(strokeDash=[8, 8], color='red', size=2).encode(
+        x=alt.X('name:N', sort=None, title='Participant'),
     )
 
-    # Rotate the x-axis labels so they fit
-    bar = bar.configure_axisX(labelAngle=-45)
-    st.altair_chart(bar, use_container_width=True)
+    bar = (
+        alt.Chart(df)
+        .mark_bar(clip=True)
+        .encode(
+            x=alt.X('name:N', sort=None, title='Participant'),
+            y=alt.Y(f'{metric}:Q', title=f'{metric.upper()} Score', scale=alt.Scale(domain=[bottom, top])),
+            color=colors_cluster,
+            tooltip=['name', 'cluster', f'{metric}'],
+        )
+        .properties(title=f'{metric.upper()} by Participant', width=700, height=400)
+    )
 
-  with scatter_tab:
+    # Layer the bar chart and the rule
+    chart = alt.layer(bar, rule).configure_axisX(labelAngle=-90)
+    st.altair_chart(chart, use_container_width=True)
+  
+def scatter_chart(df,metric, colors_cluster):
+    """
+    Generate a scatter chart for the leaderboard.
+    """
+    top = 1.1 * df[metric].max()
+    bottom = 0.9 * df[metric].min()
+    right = 1.1 * df['time'].max()
+    left = 0.9 * df['time'].min()
     chart = (
         alt.Chart(df)
           .mark_circle(size=80)
           .encode(
-            x=alt.X('time:Q', title='Run time (s)'),
-            y=alt.Y(f'{metric}:Q', title=f'{metric.upper()} Score'),
+            x=alt.X('time:Q', title='Run time (s)', scale=alt.Scale(domain=[left, right])),
+            y=alt.Y(f'{metric}:Q', title=f'{metric.upper()} Score', scale=alt.Scale(domain=[bottom, top])),
             color=colors_cluster,
             tooltip=['name','cluster',f'{metric}','time']
           )
@@ -89,32 +67,94 @@ if __name__ == '__main__':
     )
     st.altair_chart(chart, use_container_width=True)
 
-  with cluster_tab:
+def cluster_chart(df, metric, colors_cluster):
+    """
+    Generate a cluster chart for the leaderboard.
+    """
     cluster_df = df.groupby('cluster').agg(
         {
             'bleu': 'mean',
-            'ter': 'mean'}).reset_index()
+            'ter': 'mean',
+            'comment':lambda x: 'Baseline' if any(x == 'Baseline') else None}).reset_index()
+    top = 1.1 * cluster_df[metric].max()
+    bottom = 0.9 * cluster_df[metric].min()
     bar = (
       alt.Chart(cluster_df)
-      .mark_bar()
+      .mark_bar(clip=True)
       .encode(
           x=alt.X('cluster:N', sort=None, title='Cluster'),
-          y=alt.Y(f'{metric}:Q', title=f'{metric.upper()} Score'),
+          y=alt.Y(f'{metric}:Q', title=f'{metric.upper()} Score',scale=alt.Scale(domain=[bottom, top])),
           color=colors_cluster,
           tooltip=['cluster',f'{metric}']
       )
       .properties(title=f'Average {metric.upper()} by Cluster', width=700, height=400)
     )
-    bar = bar.configure_axisX(labelAngle=0)
-    st.altair_chart(bar, use_container_width=True)
 
-  #################################
-  # TABLES
-  #################################
-  st.write(df)
-  st.download_button(
-      label="Download data",
-      data=df.to_csv(index=False).encode('utf-8'),
-      file_name='archer_results.csv',
-      mime='text/csv',
-  )
+    rule = alt.Chart(cluster_df[cluster_df['comment'] == 'Baseline']).mark_rule(strokeDash=[8, 8], color='red', size=2).encode(
+        x=alt.X('cluster:N', sort=None, title='Cluster'),
+    )
+    chart = alt.layer(bar, rule).configure_axisX(labelAngle=0)
+    st.altair_chart(chart, use_container_width=True)
+
+def main():
+    if len(argv) > 2:
+      st.write("Usage: python display.py [filename]")
+      st.write("If no filename is provided, the default file 'provisional.csv' will be used.")
+    filename = argv[1] if len(argv) > 1 else 'provisional.csv'
+
+    df = pd.read_csv(filename)
+    colors_cluster = color_generator(df['cluster'].unique(), palette='viridis')
+    df['datetime'] = pd.to_datetime(df['datetime'])
+
+    st.title('ARCHER - Machine Translation Evaluation Results')
+    st.logo('images/archer.png', icon_image='images/archer-short.png', link='http://archer.prhlt.upv.es/')
+
+    #################
+    # LEADER BOARD
+    #################
+    with st.sidebar:
+      st.header('Leader board')
+      leaderborad = df[['position','name', 'cluster']].copy()
+      st.table(leaderborad.sort_values('position').set_index('position'))
+
+    ##################
+    # FILTERS
+    ##################
+    # Select main metric
+    metric = st.selectbox(
+        'Select the metric to display',
+        ('BLEU', 'TER')
+    ).lower()
+
+    # Range of clusters
+    # num_clusters = max(df['cluster'])
+    # best_cluster, worse_cluster = st.slider("Displayed clusters", 1, num_clusters, (1, max(df['cluster'])))
+    # df = df[(df['cluster'] >= best_cluster) & (df['cluster'] <= worse_cluster)]
+
+    #################################
+    # CHARTS
+    #################################
+    bar_tab, scatter_tab, cluster_tab = st.tabs(['Leader board', 'Quality vs Time', 'Clusters average'])
+
+    with bar_tab:
+      bar_leaderboard(df, metric, colors_cluster)
+
+    with scatter_tab:
+      scatter_chart(df, metric, colors_cluster)
+
+    with cluster_tab:
+      cluster_chart(df, metric, colors_cluster)
+
+    #################################
+    # TABLES
+    #################################
+    st.write(df)
+    st.download_button(
+        label="Download data",
+        data=df.to_csv(index=False).encode('utf-8'),
+        file_name='archer_results.csv',
+        mime='text/csv',
+    )
+
+if __name__ == '__main__':
+    main()

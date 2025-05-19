@@ -9,10 +9,11 @@ from art import aggregators, scores, significance_tests
 
 def read_parameters():
     parser = argparse.ArgumentParser(description='Evaluates the participant dockerized models. They need to output the translations of the source file in SGM format.')
-    parser.add_argument('systems', type=str, help='Path to the directory that contains all the dockerized systems')
     parser.add_argument('source', type=str, help='Path to the sources file')
     parser.add_argument('reference', type=str, help='Path to the references file')
+    parser.add_argument('--systems', type=str, help='Path to the directory that contains all the dockerized systems. If provided, the systems will be run and the translations will be evaluated. If not provided, the translations will be read from the dir_preds directory.')
     parser.add_argument('--dir_preds', type=str, default='translations', help='Name of directory with the translation files')
+    parser.add_argument('--baselines', type=str, nargs='+', help='List of baseline systems to be evaluated. Must be included among the rest of the systems')
     parser.add_argument('--output', type=str, default='results.csv', help='Path to the file that will store the leaderboard')
     parser.add_argument('-a','--append', action='store_true', help='Append the results to the output file')
     parser.add_argument('--metrics', type=str, nargs='+', default=['bleu', 'ter'], choices=['bleu', 'ter'], help='List of metrics to be used (default: BLEU and TER)')
@@ -31,7 +32,7 @@ def get_bleu(x, y):
         bleu: BLEU score
     '''
     bleu = sacrebleu.corpus_bleu(x, [y]).score
-    return bleu.score
+    return bleu
 def get_ter(x, y):
     '''
     Compute the TER score between two lists of segments.
@@ -42,14 +43,17 @@ def get_ter(x, y):
         ter: TER score
     '''
     ter = sacrebleu.corpus_ter(x, [y]).score
-    return ter.score
+    return ter
 
 def check_paramaters(args):
     # Check if the systems directory exists and get the list of models
-    try:
-        models = os.listdir(args.systems)
-    except FileNotFoundError:
-        raise FileNotFoundError(f"Directory {args.systems} not found.")
+    if args.systems:
+        try:
+            models = os.listdir(args.systems)
+        except FileNotFoundError:
+            raise FileNotFoundError(f"Directory {args.systems} not found.")
+    else: 
+        models = []
     # Check if the source file exists
     try:
         os.path.exists(args.source)
@@ -190,10 +194,13 @@ def main():
     models, refs, metrics = check_paramaters(args)
     
     # Translate the sources
-    models.sort()
-    run_times = run_tests(models, args.systems, args.source, args.dir_preds)
+    if models:
+        models.sort()
+        run_times = run_tests(models, args.systems, args.source, args.dir_preds)
+    else:
+        run_times = [0] * len(os.listdir(args.dir_preds))
     
-    fields = ['name'] + list(metrics.keys()) + ['cluster', 'time', 'datetime', 'bench', 'metrics']
+    fields = ['name'] + list(metrics.keys()) + ['cluster', 'time', 'datetime', 'bench', 'metrics','comment']
     register = pd.DataFrame(columns=fields)
     # Evaluate the translations
     predictions = os.listdir(args.dir_preds)
@@ -212,6 +219,7 @@ def main():
         global_scores['name'] = [os.path.basename(filename).replace('.sgm','')]
         global_scores['datetime'] = [pd.Timestamp.now()]
         global_scores['bench'] = [os.path.basename(args.source) + '-' + os.path.basename(args.reference)]
+        global_scores['comment'] = ['Baseline' if global_scores['name'][0] in args.baselines else '']
         register = pd.concat([register, pd.DataFrame(global_scores)],ignore_index=True)
     
     # Sort the participants by BLEU score
