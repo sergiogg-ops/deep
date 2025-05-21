@@ -148,13 +148,14 @@ def main():
     #################################
     # TABLES
     #################################
-    st.write(df)
-    st.download_button(
-        label="Download data",
-        data=df.to_csv(index=False).encode('utf-8'),
-        file_name='archer_results.csv',
-        mime='text/csv',
-    )
+    with st.expander("Show data", expanded=False):
+      st.write(df)
+      st.download_button(
+          label="Download data",
+          data=df.to_csv(index=False).encode('utf-8'),
+          file_name='archer_results.csv',
+          mime='text/csv',
+      )
 
 if __name__ == '__main__':
     main()
