@@ -97,17 +97,16 @@ def cluster_chart(df, metric, colors_cluster):
     st.altair_chart(chart, use_container_width=True)
 
 def main():
-    if len(argv) > 2:
-      st.write("Usage: python display.py [filename]")
-      st.write("If no filename is provided, the default file 'provisional.csv' will be used.")
-    filename = argv[1] if len(argv) > 1 else 'provisional.csv'
+    if len(argv) != 2:
+      st.write("Usage: python display.py filename.csv")
+    filename = argv[1]
 
     df = pd.read_csv(filename)
     colors_cluster = color_generator(df['cluster'].unique(), palette='viridis')
     df['datetime'] = pd.to_datetime(df['datetime'])
 
     st.title('ARCHER - Machine Translation Evaluation Results')
-    st.logo('images/archer.png', icon_image='images/archer-short.png', link='http://archer.prhlt.upv.es/')
+    st.logo('images/archer.png', icon_image='images/archer-short.png', link='https://archer-challenge.eu/')
 
     #################
     # LEADER BOARD

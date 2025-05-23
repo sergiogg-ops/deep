@@ -1,6 +1,7 @@
 import argparse
 import os
 import sacrebleu
+import fastwer
 import pandas as pd
 import lxml.etree as ET
 from tqdm import tqdm
@@ -10,7 +11,7 @@ from art import aggregators, scores, significance_tests
 def read_parameters():
     parser = argparse.ArgumentParser(description='Evaluates the participant dockerized models. They need to output the translations of the source file in SGM format.')
     parser.add_argument('source', type=str, help='Path to the sources file')
-    parser.add_argument('reference', type=str, help='Path to the references file')
+    parser.add_argument('reference', type=str, nargs='+', help='Path to the references file(s)')
     parser.add_argument('--systems', type=str, help='Path to the directory that contains all the dockerized systems. If provided, the systems will be run and the translations will be evaluated. If not provided, the translations will be read from the dir_preds directory.')
     parser.add_argument('--dir_preds', type=str, default='translations', help='Name of directory with the translation files')
     parser.add_argument('--baselines', type=str, nargs='+', help='List of baseline systems to be evaluated. Must be included among the rest of the systems')
@@ -31,7 +32,7 @@ def get_bleu(x, y):
     Returns:
         bleu: BLEU score
     '''
-    bleu = sacrebleu.corpus_bleu(x, [y]).score
+    bleu = sacrebleu.corpus_bleu(x, y).score
     return bleu
 def get_ter(x, y):
     '''
@@ -42,7 +43,7 @@ def get_ter(x, y):
     Returns:
         ter: TER score
     '''
-    ter = sacrebleu.corpus_ter(x, [y]).score
+    ter = sacrebleu.corpus_ter(x, y).score
     return ter
 
 def check_paramaters(args):
@@ -61,7 +62,7 @@ def check_paramaters(args):
         raise FileNotFoundError(f"Source file {args.source} not found.")
     # Check if the reference file exists
     try:
-        refs = parse_xml(args.reference)
+        refs = [parse_xml(file) for file in args.reference]
     except FileNotFoundError:
         raise FileNotFoundError(f"Reference file {args.reference} not found.")
     if not os.path.exists(args.dir_preds):
@@ -130,13 +131,14 @@ def evaluate(preds, refs, metrics):
         metrics: list of tuples with BLEU and TER scores for each segment
     '''
     scores = []
+    n_refs = len(refs)
     keys = list(metrics.keys())
     keys.sort()
     for i in range(len(preds)):
         score = []
         for k in keys:
             func = metrics[k]
-            score.append(func([preds[i]], [refs[i]]))
+            score.append(func([preds[i]], [refs[j][i] for j in range(n_refs)]))
         scores.append(score)
     global_metrics = {k:metrics[k](preds, refs) for k in keys}
     return global_metrics, scores
