@@ -67,15 +67,17 @@ def scatter_chart(df,metric, colors_cluster):
     )
     st.altair_chart(chart, use_container_width=True)
 
-def cluster_chart(df, metric, colors_cluster):
+def cluster_chart(df, metric, colors_cluster, mode):
     """
     Generate a cluster chart for the leaderboard.
     """
-    cluster_df = df.groupby('cluster').agg(
-        {
-            'bleu': 'mean',
-            'ter': 'mean',
-            'comment':lambda x: 'Baseline' if any(x == 'Baseline') else None}).reset_index()
+    conf = {}
+    if mode == 'mt':
+        conf = {'bleu': 'mean', 'ter': 'mean'}
+    else:
+        conf = {'wer': 'mean', 'bwer': 'mean'}
+    conf['comment'] = lambda x: 'Baseline' if any(x == 'Baseline') else None
+    cluster_df = df.groupby('cluster').agg(conf).reset_index()
     top = 1.1 * cluster_df[metric].max()
     bottom = 0.9 * cluster_df[metric].min()
     bar = (
@@ -97,15 +99,22 @@ def cluster_chart(df, metric, colors_cluster):
     st.altair_chart(chart, use_container_width=True)
 
 def main():
-    if len(argv) != 2:
-      st.write("Usage: python display.py filename.csv")
+    if len(argv) != 3:
+      st.write("Usage: python display.py <filename.csv> <mode>")
     filename = argv[1]
+    MODE = argv[2]
+    if MODE not in ['mt','htr']:
+      st.write("Invalid mode. Use 'mt' for machine translation or 'htr' for handwriting recognition.")
+      return
 
     df = pd.read_csv(filename)
     colors_cluster = color_generator(df['cluster'].unique(), palette='viridis')
     df['datetime'] = pd.to_datetime(df['datetime'])
 
-    st.title('ARCHER - Machine Translation Evaluation Results')
+    if MODE == 'mt':
+      st.title('ARCHER - Machine Translation Evaluation Results')
+    else:
+      st.title('ARCHER - Handwritten Text Recognition Evaluation Results')
     st.logo('images/archer.png', icon_image='images/archer-short.png', link='https://archer-challenge.eu/')
 
     #################
@@ -120,9 +129,10 @@ def main():
     # FILTERS
     ##################
     # Select main metric
+    opt = ('BLEU', 'TER') if MODE == 'mt' else ('BWER', 'WER')
     metric = st.selectbox(
         'Select the metric to display',
-        ('BLEU', 'TER')
+        opt
     ).lower()
 
     # Range of clusters
@@ -142,7 +152,7 @@ def main():
       scatter_chart(df, metric, colors_cluster)
 
     with cluster_tab:
-      cluster_chart(df, metric, colors_cluster)
+      cluster_chart(df, metric, colors_cluster, MODE)
 
     #################################
     # TABLES

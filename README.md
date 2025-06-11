@@ -1,5 +1,5 @@
 # Visualization
-This git contains tools for evaluation and its posterior visualization of Machine Translation (MT) systems. 
+This git contains tools for evaluation and its posterior visualization of Machine Translation (MT) and Handwriten Text Recognition (HTR) systems. To evaluate HTR systems you will need to run the `setup.sh` script before.
 
 ## Evaluation
 The evaluation of the systems can be done using the `eval.py` script. Each system must be dockerized and prepared to be runned appropiately. It must read the `data/source.sgm` file and write the corresponding translations in the `data/predictions.sgm` file of the docker container. The `eval.py` script will read the predictions, store them in a directory, evaluate each one with the appropriate metrics and clusterize the submissions. 

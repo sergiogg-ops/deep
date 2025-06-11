@@ -175,3 +175,9 @@ cython_debug/
 
 translations/*
 *.out
+*.csv
+fastwer/*
+refs/*
+res_htr/*
+archer/*
+onmt/*
