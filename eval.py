@@ -1,7 +1,7 @@
 import argparse
 import os
 import sacrebleu
-#import fastwer
+import fastwer
 import pandas as pd
 import lxml.etree as ET
 from tqdm import tqdm
@@ -144,13 +144,16 @@ def parse_xml(file):
         segments: list of segments
     '''
     try:
-        tree = ET.parse(file,  ET.XMLParser(recover=True))
+        with open(file, 'r') as f:
+            content = f.read()
     except IOError:
         raise IOError(f"File {file} not found.")
+    content = sub(r'<unk>','%unk%', content) # replace <unk> with %unk% to avoid issues with XML parsing
+    try:
+        root= ET.fromstring(content,  ET.XMLParser(recover=True))
     except SyntaxError:
         raise SyntaxError(f"File {file} is not well-formed.")
     
-    root = tree.getroot()
     segments = {}
     for doc in root: #tree.getiterator(tag='doc'): 
         segs = []
@@ -208,37 +211,38 @@ def evaluate(preds, refs, metrics):
         global_ter: TER score
         metrics: list of tuples with BLEU and TER scores for each segment
     '''
-    scores = []
+    scores = {}
     n_refs = len(refs)
     keys = list(metrics.keys())
     keys.sort()
-    for i in range(len(preds)):
-        score = []
-        for k in keys:
-            func = metrics[k]
-            score.append(func([preds[i]], [refs[j][i] for j in range(n_refs)]))
-        scores.append(score)
+    for k in keys:
+        func = metrics[k]
+        scores[k] = []
+        for i in range(len(preds)):
+            scores[k].append(func([preds[i]], [[refs[j][i]] for j in range(n_refs)]))
     global_metrics = {k:metrics[k](preds, refs) for k in keys}
     return global_metrics, scores
 
-def assess_differences(a_metrics, b_metrics, trials, p_value):
+def assess_differences(a_scores, b_scores, trials, p_value):
     '''
     Assess the differences between two sets of metrics using Approximate Randomization Test.
     Args:
-        a_metrics: list of metrics for system A (can be a list of lists)
-        b_metrics: list of metrics for system B (can be a list of lists)
+        a_metrics: list of metrics for system A
+        b_metrics: list of metrics for system B
         trials: number of trials for the test
         p_value: p-value for the test 
     Returns:
         True if the difference is significant, False otherwise
     '''
     test = significance_tests.ApproximateRandomizationTest(
-        scores.Scores([scores.Score(m) for m in a_metrics]),
-        scores.Scores([scores.Score(m) for m in b_metrics]),
+        scores.Scores([scores.Score([s]) for s in a_scores]),
+        scores.Scores([scores.Score([s]) for s in b_scores]),
         aggregators.average,
         trials=trials)
 
-    return test.run() < p_value
+    run_val = test.run()
+    print(f"Approximate Randomization Test: {run_val} (p-value: {p_value})")
+    return run_val < p_value
 
 def run_tests(models, models_dir, source, dir_preds):
     '''
@@ -280,7 +284,7 @@ def main():
         run_times = {model: run_times[i] for i, model in enumerate(models)}
     else:
         run_times = {}
-    fields = ['name'] + list(metrics.keys()) + ['cluster', 'time', 'datetime', 'metrics', 'comment']
+    fields = ['name'] + list(metrics.keys()) + ['time', 'datetime', 'metrics', 'comment']
     register = pd.DataFrame(columns=fields)
     # Evaluate the translations
     predictions = os.listdir(args.dir_preds)
@@ -310,22 +314,35 @@ def main():
     register = register.sort_values(by=[main_metric], ascending=False)
     register['position'] = [i+1 for i in range(len(register))]
 
+    for i in range(len(register)):
+        row = register.iloc[i]
+        print(row['name'], row['bleu'], row['ter'])
+        #print(row['metrics']['bleu'][-10:])
+        print(sum(row['metrics']['bleu']) / len(row['metrics']['bleu']))
+        print(sum(row['metrics']['ter']) / len(row['metrics']['ter']))
+        print('----------------------------------')
+
+    #exit()
     # Check the significance between the systems
-    cluster_id = int(1)
-    clusters = []
-    for i in tqdm(range(len(register)-1),desc="Clustering"):
-        this_row = register.iloc[i]
-        next_row = register.iloc[i+1]
-        if this_row[main_metric] is None or next_row[main_metric] is None:
-            break
-        diff = assess_differences(this_row['metrics'], next_row['metrics'],trials=args.trials, p_value=args.p_value)
+    for metric in metrics.keys():
+        cluster_id = int(1)
+        clusters = []
+        for i in tqdm(range(len(register)-1),desc="Clustering " + metric):
+            this_row = register.iloc[i]
+            next_row = register.iloc[i+1]
+            if this_row[main_metric] is None or next_row[main_metric] is None:
+                break
+            diff = assess_differences(this_row['metrics'][metric], 
+                                      next_row['metrics'][metric],
+                                      trials=args.trials, 
+                                      p_value=args.p_value)
+            clusters.append(cluster_id)
+            if diff:
+                cluster_id += 1
         clusters.append(cluster_id)
-        if diff:
-            cluster_id += 1
-    clusters.append(cluster_id)
-    if len(clusters) < len(register):
-        clusters += [cluster_id + 1] * (len(register) - len(clusters))
-    register['cluster'] = clusters
+        if len(clusters) < len(register):
+            clusters += [cluster_id + 1] * (len(register) - len(clusters))
+        register[f'cluster_{metric}'] = clusters
 
     # Save the results
     register = register.drop(columns=['metrics'])

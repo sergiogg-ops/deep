@@ -37,7 +37,7 @@ def bar_leaderboard(df, metric, colors_cluster):
             x=alt.X('name:N', sort=None, title='Participant'),
             y=alt.Y(f'{metric}:Q', title=f'{metric.upper()} Score', scale=alt.Scale(domain=[bottom, top])),
             color=colors_cluster,
-            tooltip=['name', 'cluster', f'{metric}'],
+            tooltip=['name', f'cluster_{metric}', f'{metric}'],
         )
         .properties(title=f'{metric.upper()} by Participant', width=700, height=400)
     )
@@ -61,7 +61,7 @@ def scatter_chart(df,metric, colors_cluster):
             x=alt.X('time:Q', title='Run time (s)', scale=alt.Scale(domain=[left, right])),
             y=alt.Y(f'{metric}:Q', title=f'{metric.upper()} Score', scale=alt.Scale(domain=[bottom, top])),
             color=colors_cluster,
-            tooltip=['name','cluster',f'{metric}','time']
+            tooltip=['name',f'cluster_{metric}',f'{metric}','time']
           )
           .properties(title=f"{metric.upper()} vs Computation Time", width=700, height=400)
     )
@@ -77,23 +77,23 @@ def cluster_chart(df, metric, colors_cluster, mode):
     else:
         conf = {'wer': 'mean', 'bwer': 'mean'}
     conf['comment'] = lambda x: 'Baseline' if any(x == 'Baseline') else None
-    cluster_df = df.groupby('cluster').agg(conf).reset_index()
+    cluster_df = df.groupby(f'cluster_{metric}').agg(conf).reset_index()
     top = 1.1 * cluster_df[metric].max()
     bottom = 0.9 * cluster_df[metric].min()
     bar = (
       alt.Chart(cluster_df)
       .mark_bar(clip=True)
       .encode(
-          x=alt.X('cluster:N', sort=None, title='Cluster'),
+          x=alt.X(f'cluster_{metric}:N', sort=None, title='Cluster'),
           y=alt.Y(f'{metric}:Q', title=f'{metric.upper()} Score',scale=alt.Scale(domain=[bottom, top])),
           color=colors_cluster,
-          tooltip=['cluster',f'{metric}']
+          tooltip=[f'cluster_{metric}',f'{metric}']
       )
       .properties(title=f'Average {metric.upper()} by Cluster', width=700, height=400)
     )
 
     rule = alt.Chart(cluster_df[cluster_df['comment'] == 'Baseline']).mark_rule(strokeDash=[8, 8], color='red', size=2).encode(
-        x=alt.X('cluster:N', sort=None, title='Cluster'),
+        x=alt.X(f'cluster_{metric}:N', sort=None, title='Cluster'),
     )
     chart = alt.layer(bar, rule).configure_axisX(labelAngle=0)
     st.altair_chart(chart, use_container_width=True)
@@ -107,8 +107,18 @@ def main():
       st.write("Invalid mode. Use 'mt' for machine translation or 'htr' for handwriting recognition.")
       return
 
+    ##################
+    # FILTERS
+    ##################
+    # Select main metric
+    opt = ('BLEU', 'TER') if MODE == 'mt' else ('BWER', 'WER')
+    metric = st.selectbox(
+        'Select the metric to display',
+        opt
+    ).lower()
+
     df = pd.read_csv(filename)
-    colors_cluster = color_generator(df['cluster'].unique(), palette='viridis')
+    colors_cluster = color_generator(df[f'cluster_{metric}'].unique(), label=f'cluster_{metric}', palette='viridis')
     df['datetime'] = pd.to_datetime(df['datetime'])
 
     if MODE == 'mt':
@@ -122,23 +132,8 @@ def main():
     #################
     with st.sidebar:
       st.header('Leader board')
-      leaderborad = df[['position','name', 'cluster']].copy()
+      leaderborad = df[['position','name', f'cluster_{metric}']].copy()
       st.table(leaderborad.sort_values('position').set_index('position'))
-
-    ##################
-    # FILTERS
-    ##################
-    # Select main metric
-    opt = ('BLEU', 'TER') if MODE == 'mt' else ('BWER', 'WER')
-    metric = st.selectbox(
-        'Select the metric to display',
-        opt
-    ).lower()
-
-    # Range of clusters
-    # num_clusters = max(df['cluster'])
-    # best_cluster, worse_cluster = st.slider("Displayed clusters", 1, num_clusters, (1, max(df['cluster'])))
-    # df = df[(df['cluster'] >= best_cluster) & (df['cluster'] <= worse_cluster)]
 
     #################################
     # CHARTS
