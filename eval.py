@@ -314,15 +314,6 @@ def main():
     register = register.sort_values(by=[main_metric], ascending=False)
     register['position'] = [i+1 for i in range(len(register))]
 
-    for i in range(len(register)):
-        row = register.iloc[i]
-        print(row['name'], row['bleu'], row['ter'])
-        #print(row['metrics']['bleu'][-10:])
-        print(sum(row['metrics']['bleu']) / len(row['metrics']['bleu']))
-        print(sum(row['metrics']['ter']) / len(row['metrics']['ter']))
-        print('----------------------------------')
-
-    #exit()
     # Check the significance between the systems
     for metric in metrics.keys():
         cluster_id = int(1)
