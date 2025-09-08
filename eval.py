@@ -4,22 +4,24 @@ import sacrebleu
 import fastwer
 import pandas as pd
 import lxml.etree as ET
+import subprocess
+import sys
 from tqdm import tqdm
 from time import time
-from re import sub
+from re import sub, findall
 from unicodedata import normalize
 from art import aggregators, scores, significance_tests
 
 def read_parameters():
     parser = argparse.ArgumentParser(description='Evaluates the participant dockerized models. They need to output the translations of the source file in SGM format.')
     parser.add_argument('reference', type=str, nargs='+', help='Path to the references file(s)')
-    parser.add_argument('--source', type=str, help='Path to the sources file')
+    parser.add_argument('--source', type=str, nargs='+', help='Path to the sources files')
     parser.add_argument('--systems', type=str, help='Path to the directory that contains all the dockerized systems. If provided, the systems will be run and the translations will be evaluated. If not provided, the translations will be read from the dir_preds directory.')
     parser.add_argument('--dir_preds', type=str, default='translations', help='Name of directory with the translation files')
     parser.add_argument('--baselines', type=str, nargs='+', default=[], help='List of baseline systems to be evaluated. Must be included among the rest of the systems')
     parser.add_argument('--output', type=str, default='results.csv', help='Path to the file that will store the leaderboard')
     parser.add_argument('-a','--append', action='store_true', help='Append the results to the output file')
-    parser.add_argument('--metrics', type=str, nargs='+', default=['bleu', 'ter'], choices=['bleu', 'ter','wer','bwer'], help='List of metrics to be used (default: BLEU and TER)')
+    parser.add_argument('--metrics', type=str, nargs='+', default=['bleu', 'ter'], choices=['bleu', 'ter','chrf','beer','wer','bwer'], help='List of metrics to be used (default: BLEU and TER)')
     parser.add_argument('--trials', type=int, default=10000, help='Number of trials for the ART (default: 10000)')
     parser.add_argument('--p_value', type=float, default=0.05, help='P-value for the ART (default: 0.05)')
     parser.add_argument('--task', type=str, required=True, choices=['mt','dr'], help='Task to be evaluated: mt (machine translation) or dr (document recognition)')
@@ -49,6 +51,18 @@ def get_ter(x, y):
     '''
     ter = sacrebleu.corpus_ter(x, y).score
     return ter
+
+def get_chrf(x, y):
+    '''
+    Compute the CHR-F score between two lists of segments.
+    Args:
+        x: list of translated segments
+        y: list of reference segments
+    Returns:
+        chrf: CHR-F score
+    '''
+    chrf = sacrebleu.corpus_chrf(x, y).score
+    return chrf
 
 def get_wer(x, y):
     '''
@@ -99,6 +113,43 @@ def get_bwer(x, y):
         glob_ref_wl += len(sent_x.split())
     return 100 * global_scr / glob_ref_wl
 
+def get_beer(x, y):
+    '''
+    Compute the BEER score between two lists of segments.
+    Args:
+        x: list of translated segments
+        y: list of reference segments
+    Returns:
+        beer: BEER score
+    '''
+    dir = os.path.dirname(os.path.realpath(sys.argv[0]))
+    hyps_file = save_to_file(x)
+    refs_files = [save_to_file(ref) for ref in y]
+
+    # Compute BEER
+    try:
+        process = subprocess.Popen((dir + '/beer_2.0/beer -s ' + hyps_file
+                                    + ' -r ' + ':'.join(refs_files)
+                                    + ' --printSentScores').split(),
+                                   stdout=subprocess.PIPE)
+        beer, _ = process.communicate()
+    except FileNotFoundError:
+        sys.stderr.write('Error: Beer requirement has not been satisfied.\n')
+        sys.exit(-1)
+
+    # Delete aux files
+    process = subprocess.Popen(('rm ' + hyps_file + ' '
+                                + ' '.join(refs_files)).split(), stdout=subprocess.PIPE)
+    beer = beer.decode('utf-8')
+    beer = [float(s) for s in findall(r"score is ([0-9.]+)", beer)]
+    return  sum(beer) / len(beer), beer
+
+def save_to_file(sentences):
+    file = '/tmp/' + str(time()) + '_archer'
+    with open(file, 'w') as f:
+        f.write('\n'.join(sentences))
+    return file
+
 def check_paramaters(args):
     # Check if the systems directory exists and get the list of models
     if args.systems:
@@ -109,15 +160,20 @@ def check_paramaters(args):
     else: 
         models = []
     # Check if the source file exists
-    try:
-        if args.source:
-            os.path.exists(args.source)
-    except FileNotFoundError:
-        raise FileNotFoundError(f"Source file {args.source} not found.")
+    if args.source:
+        for src in args.source:
+            if not os.path.exists(src):
+                raise FileNotFoundError(f"Source file {src} not found.")
     # Check if the reference file exists
     try:
         func = parse_xml if args.task == 'mt' else read_dir
-        refs = [func(file) for file in args.reference]
+        refs = []
+        for dir in args.reference:
+            refs.append([])
+            docs = os.listdir(dir) 
+            docs.sort()
+            for doc in docs:
+                refs[-1].extend(func(os.path.join(dir, doc)))
     except FileNotFoundError:
         raise FileNotFoundError(f"Reference file {args.reference} not found.")
     if not os.path.exists(args.dir_preds):
@@ -129,6 +185,8 @@ def check_paramaters(args):
             metrics[m] = get_bleu
         elif m == 'ter':
             metrics[m] = get_ter
+        elif m == 'chrf':
+            metrics[m] = get_chrf
         elif m == 'wer':
             metrics[m] = get_wer
         elif m == 'bwer':
@@ -136,47 +194,22 @@ def check_paramaters(args):
     return models, refs, metrics
 
 def parse_xml(file):
-    '''
-    Parse the XML file and return the segments.
-    Args:
-        file: path to the XML file
-    Returns:
-        segments: list of segments
-    '''
     try:
-        with open(file, 'r') as f:
-            content = f.read()
+        tree = ET.parse(file,  ET.XMLParser(recover=True))
     except IOError:
         raise IOError(f"File {file} not found.")
-    content = sub(r'<unk>','%unk%', content) # replace <unk> with %unk% to avoid issues with XML parsing
-    try:
-        root= ET.fromstring(content,  ET.XMLParser(recover=True))
     except SyntaxError:
         raise SyntaxError(f"File {file} is not well-formed.")
     
-    segments = {}
-    for doc in root: #tree.getiterator(tag='doc'): 
-        segs = []
-        for tag in doc:
-            if tag.tag == 'hl' or tag.tag == 'p':
-                for seg in tag:
-                    if seg.text is None:
-                        segs.append('')
-                    else:
-                        segs.append(seg.text.strip())
-            elif tag.tag.lower() == 'seg':
-                if tag.text is None:
-                    segs.append('')
-                else:
-                    segs.append(tag.text.strip())
-        if len(segs) > 0:
-            segments[doc.attrib['DocID']] = segs
-    order = sorted(segments.keys())
-    res = []
-    for docid in order:
-        seg = segments[docid]
-        res += seg
-    return res
+    root = tree.getroot()
+    segments = []
+    for seg in root: #tree.getiterator(tag='doc'): 
+        if seg.tag == 'SEG':
+            if seg.text is None:
+                segments.append('')
+            else:
+                segments.append(seg.text.strip())
+    return segments
 
 def parse_moses(file):
     with open(file,'r') as f:
@@ -219,7 +252,10 @@ def evaluate(preds, refs, metrics):
         func = metrics[k]
         scores[k] = []
         for i in range(len(preds)):
-            scores[k].append(func([preds[i]], [[refs[j][i]] for j in range(n_refs)]))
+            # print('-----------------------------------')
+            # print(preds[i])
+            # print([type(refs[j][i]) for j in range(n_refs)])
+            scores[k].append(func([preds[i]], [refs[j][i] for j in range(n_refs)]))
     global_metrics = {k:metrics[k](preds, refs) for k in keys}
     return global_metrics, scores
 
@@ -241,30 +277,31 @@ def assess_differences(a_scores, b_scores, trials, p_value):
         trials=trials)
 
     run_val = test.run()
-    print(f"Approximate Randomization Test: {run_val} (p-value: {p_value})")
+    #print(f"Approximate Randomization Test: {run_val} (p-value: {p_value})")
     return run_val < p_value
 
-def run_tests(models, models_dir, source, dir_preds):
+def run_tests(models, models_dir, sources, dir_preds):
     '''
     Translate the sources with all the systems.
 
     Args:
         models: list of models to be evaluated
         models_dir: path to the directory that contains all the dockerized systems
-        source: path to the sources file
+        sources: path to the sources file
         dir_preds: path to the directory that will store the translation files
     Returns:
         run_times: list of times taken to run each model
     '''
     run_times = []
     for model in tqdm(models, desc="Running participants"):
-        output_name = os.path.join(dir_preds, model + '.sgm')
         print(f"Building {model}")
         os.system(f"docker build -t {model} {models_dir}/{model}")
-        os.system(f"touch {output_name}")
         print(f"Running {model}")
         ini = time()
-        os.system(f"docker run --rm -v {os.path.abspath(source)}:/data/source.sgm -v {os.path.abspath(output_name)}:/data/predictions.sgm --gpus all {model} ")
+        for src in sources:
+            output_name = os.path.join(dir_preds, model + '_' + os.path.basename(src))
+            os.system(f"touch {output_name}")
+            os.system(f"docker run --rm -v {os.path.abspath(src)}:/data/source.sgm -v {os.path.abspath(output_name)}:/data/predictions.sgm --gpus all {model} ")
         fin = time()
         run_times.append(fin - ini)
         os.system(f"docker rmi {model}")
@@ -276,6 +313,9 @@ def run_tests(models, models_dir, source, dir_preds):
 def main():
     args = read_parameters()
     models, refs, metrics = check_paramaters(args)
+    # print('############################')
+    # print([len(r) for r in refs])
+    # print('############################')
     
     # Translate the sources
     if models:
@@ -289,19 +329,32 @@ def main():
     # Evaluate the translations
     predictions = os.listdir(args.dir_preds)
     predictions.sort()
+    full_preds, models = [], []
+    prev_name = ''
     read_func = parse_xml if args.task == 'mt' else read_dir
-    for filename in tqdm(predictions, desc="Evaluating"):
+    for filename in predictions:
+        prefix = filename.split('_')[0]
+        if prefix != prev_name:
+            full_preds.append([])
+            models.append(prefix)
+        next = read_func(os.path.join(args.dir_preds, filename))
+        full_preds[-1].extend(next)
+        prev_name = filename.split('_')[0]
+    for preds, model in tqdm(zip(full_preds, models), desc="Evaluating",total=len(models)):
         try:
-            preds = read_func(os.path.join(args.dir_preds, filename))
             global_scores, scores = evaluate(preds, refs, metrics)
             for k in global_scores.keys():
                 global_scores[k] = [global_scores[k]]
+            if 'beer' in args.metrics:
+                beer, sent_scr = get_beer(preds, refs)
+                global_scores['beer'] = [beer]
+                scores['beer'] = sent_scr
             global_scores['metrics'] = [scores] # sentence scores to asses the significance of the differences
         except Exception as e:
             global_scores = {k: [None] for k in metrics.keys()}
             global_scores['metrics'] = [None]
-            print(f"Error evaluating {filename}: {e}")
-        global_scores['name'] = [os.path.basename(filename).replace('.sgm','')]
+            print(f"Error evaluating {model}: {e}")
+        global_scores['name'] = [model]
         global_scores['datetime'] = [pd.Timestamp.now()]
         global_scores['task'] = [args.task]
         global_scores['subtask'] = [args.subtask]
@@ -315,7 +368,7 @@ def main():
     register['position'] = [i+1 for i in range(len(register))]
 
     # Check the significance between the systems
-    for metric in metrics.keys():
+    for metric in args.metrics:
         cluster_id = int(1)
         clusters = []
         for i in tqdm(range(len(register)-1),desc="Clustering " + metric):

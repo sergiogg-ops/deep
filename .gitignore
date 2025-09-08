@@ -173,7 +173,6 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-translations/*
 *.out
 *.csv
 fastwer/*
@@ -181,3 +180,8 @@ refs/*
 res_htr/*
 archer/*
 onmt/*
+eurollm/*
+openNMT/*
+refactor.py
+prueba/*
+beer_2.0/*
