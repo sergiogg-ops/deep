@@ -107,6 +107,12 @@ def main():
       st.write("Invalid mode. Use 'mt' for machine translation or 'htr' for handwriting recognition.")
       return
 
+    if MODE == 'mt':
+      st.title('ARCHER - Machine Translation Evaluation Results')
+    else:
+      st.title('ARCHER - Handwritten Text Recognition Evaluation Results')
+    st.logo('images/archer.png', icon_image='images/archer-short.png', link='https://archer-challenge.eu/')
+
     ##################
     # FILTERS
     ##################
@@ -120,12 +126,6 @@ def main():
     df = pd.read_csv(filename)
     colors_cluster = color_generator(df[f'cluster_{metric}'].unique(), label=f'cluster_{metric}', palette='viridis')
     df['datetime'] = pd.to_datetime(df['datetime'])
-
-    if MODE == 'mt':
-      st.title('ARCHER - Machine Translation Evaluation Results')
-    else:
-      st.title('ARCHER - Handwritten Text Recognition Evaluation Results')
-    st.logo('images/archer.png', icon_image='images/archer-short.png', link='https://archer-challenge.eu/')
 
     #################
     # LEADER BOARD

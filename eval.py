@@ -166,14 +166,17 @@ def check_paramaters(args):
                 raise FileNotFoundError(f"Source file {src} not found.")
     # Check if the reference file exists
     try:
-        func = parse_xml if args.task == 'mt' else read_dir
+        func =parse_moses# parse_xml if args.task == 'mt' else read_dir
         refs = []
         for dir in args.reference:
-            refs.append([])
-            docs = os.listdir(dir) 
-            docs.sort()
-            for doc in docs:
-                refs[-1].extend(func(os.path.join(dir, doc)))
+            if os.path.isdir(dir):
+                refs.append([])
+                docs = os.listdir(dir)
+                docs.sort()
+                for doc in docs:
+                    refs[-1].extend(func(os.path.join(dir, doc)))
+            else:
+                refs.append(func(dir))
     except FileNotFoundError:
         raise FileNotFoundError(f"Reference file {args.reference} not found.")
     if not os.path.exists(args.dir_preds):
@@ -203,7 +206,7 @@ def parse_xml(file):
     
     root = tree.getroot()
     segments = []
-    for seg in root: #tree.getiterator(tag='doc'): 
+    for seg in root[0]: #tree.getiterator(tag='doc'): 
         if seg.tag == 'SEG':
             if seg.text is None:
                 segments.append('')
@@ -332,14 +335,16 @@ def main():
     full_preds, models = [], []
     prev_name = ''
     read_func = parse_xml if args.task == 'mt' else read_dir
-    for filename in predictions:
-        prefix = filename.split('_')[0]
-        if prefix != prev_name:
-            full_preds.append([])
-            models.append(prefix)
-        next = read_func(os.path.join(args.dir_preds, filename))
-        full_preds[-1].extend(next)
-        prev_name = filename.split('_')[0]
+    # for filename in predictions:
+    #     prefix = filename.split('_')[0]
+    #     if prefix != prev_name:
+    #         full_preds.append([])
+    #         models.append(prefix)
+    #     next = read_func(os.path.join(args.dir_preds, filename))
+    #     full_preds[-1].extend(next)
+    #     prev_name = filename.split('_')[0]
+    full_preds = [read_func(os.path.join(args.dir_preds, f)) for f in predictions]
+    models = [f.split('.')[0] for f in predictions]
     for preds, model in tqdm(zip(full_preds, models), desc="Evaluating",total=len(models)):
         try:
             global_scores, scores = evaluate(preds, refs, metrics)
