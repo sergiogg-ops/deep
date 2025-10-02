@@ -4,6 +4,13 @@ import altair as alt
 from seaborn import color_palette
 from sys import argv
 
+def get_metrics(list_columns):
+    """
+    Get the list of metrics from the dataframe columns.
+    """
+    non_metric = ['name','time', 'datetime', 'comment', 'task', 'subtask', 'position']
+    return [col for col in list_columns if col not in non_metric and not col.startswith('cluster_')]
+
 def color_generator(categories, label='cluster', palette='crest'):
     """
     Generate a list of n colors.
@@ -72,10 +79,7 @@ def cluster_chart(df, metric, colors_cluster, mode):
     Generate a cluster chart for the leaderboard.
     """
     conf = {}
-    if mode == 'mt':
-        conf = {'bleu': 'mean', 'ter': 'mean'}
-    else:
-        conf = {'wer': 'mean', 'bwer': 'mean'}
+    conf[metric] = 'mean'
     conf['comment'] = lambda x: 'Baseline' if any(x == 'Baseline') else None
     cluster_df = df.groupby(f'cluster_{metric}').agg(conf).reset_index()
     top = 1.1 * cluster_df[metric].max()
@@ -98,32 +102,84 @@ def cluster_chart(df, metric, colors_cluster, mode):
     chart = alt.layer(bar, rule).configure_axisX(labelAngle=0)
     st.altair_chart(chart, use_container_width=True)
 
+def time_chart(df):
+    """
+    Generate a time pie chart for the leaderboard.
+    """
+    df = df.sort_values('datetime')
+    legend = alt.Legend(title="Participant")
+    chart = (
+        alt.Chart(df)
+          .mark_arc(innerRadius=50, outerRadius=100)
+          .encode(
+              theta=alt.Theta('time:Q', title='Run time (s)'),
+              color=alt.Color('name:N', legend=legend),
+              tooltip=['name','datetime','time']
+          )
+          .properties(title="Computation Time", width=700, height=400)
+    )
+    st.altair_chart(chart, use_container_width=True)
+
+def general_view(df):
+    """
+    General view of the dataframe.
+    """
+    metrics = get_metrics(df.columns)
+    scores = [{'metric': metric, 'scores': df[metric].values.tolist()} for metric in metrics]
+    sc_df = pd.DataFrame(scores)
+    st.dataframe(sc_df,
+                 column_config={
+                     "metric": st.column_config.TextColumn(
+                         "Metric",
+                         help="The evaluation metric",
+                     ),
+                     "scores": st.column_config.BarChartColumn(
+                         "Scores",
+                         help="The scores for each participant",
+                     ),
+                 },
+                 hide_index=True,
+                 use_container_width=True)
+
 def main():
     if len(argv) != 3:
       st.write("Usage: python display.py <filename.csv> <mode>")
     filename = argv[1]
     MODE = argv[2]
-    if MODE not in ['mt','htr']:
-      st.write("Invalid mode. Use 'mt' for machine translation or 'htr' for handwriting recognition.")
-      return
 
     if MODE == 'mt':
-      st.title('ARCHER - Machine Translation Evaluation Results')
+      st.title('Machine Translation Evaluation Results')
+    elif MODE == 'dr':
+      st.title('Handwritten Text Recognition Evaluation Results')
     else:
-      st.title('ARCHER - Handwritten Text Recognition Evaluation Results')
-    st.logo('images/archer.png', icon_image='images/archer-short.png', link='https://archer-challenge.eu/')
+      print("Invalid mode. Available modes: ['mt', 'dr']")
+      exit(1)
+    df = pd.read_csv(filename)
 
     ##################
     # FILTERS
     ##################
     # Select main metric
-    opt = ('BLEU', 'TER') if MODE == 'mt' else ('BWER', 'WER')
+    #opt = ('BLEU', 'TER') if MODE == 'mt' else ('BWER', 'WER')
+    opt = tuple(m.upper() for m in get_metrics(df.columns))
     metric = st.selectbox(
         'Select the metric to display',
         opt
     ).lower()
 
-    df = pd.read_csv(filename)
+    with st.expander("Filter proposals", expanded=False):
+        participants = df['name'].unique().tolist()
+        selected_participants = st.multiselect(
+            'Select participants to display',
+            participants,
+            default=participants
+        )
+        df = df[df['name'].isin(selected_participants)]
+
+    if df.empty:
+        st.write("No data to display. Please adjust the filters.")
+        return
+
     colors_cluster = color_generator(df[f'cluster_{metric}'].unique(), label=f'cluster_{metric}', palette='viridis')
     df['datetime'] = pd.to_datetime(df['datetime'])
 
@@ -138,7 +194,7 @@ def main():
     #################################
     # CHARTS
     #################################
-    bar_tab, scatter_tab, cluster_tab = st.tabs(['Leader board', 'Quality vs Time', 'Clusters average'])
+    bar_tab, scatter_tab, cluster_tab, time_tab = st.tabs(['Leader board', 'Quality vs Time', 'Clusters average', 'Time'])
 
     with bar_tab:
       bar_leaderboard(df, metric, colors_cluster)
@@ -148,6 +204,9 @@ def main():
 
     with cluster_tab:
       cluster_chart(df, metric, colors_cluster, MODE)
+
+    with time_tab:
+      time_chart(df)
 
     #################################
     # TABLES

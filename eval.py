@@ -197,21 +197,29 @@ def check_paramaters(args):
     return models, refs, metrics
 
 def parse_xml(file):
+    '''
+    Parse the XML file and return the segments.
+    Args:
+        file: path to the XML file
+    Returns:
+        segments: list of segments
+    '''
     try:
         tree = ET.parse(file,  ET.XMLParser(recover=True))
     except IOError:
         raise IOError(f"File {file} not found.")
     except SyntaxError:
         raise SyntaxError(f"File {file} is not well-formed.")
-    
+
     root = tree.getroot()
     segments = []
-    for seg in root[0]: #tree.getiterator(tag='doc'): 
-        if seg.tag == 'SEG':
-            if seg.text is None:
-                segments.append('')
-            else:
-                segments.append(seg.text.strip())
+    for doc in root: #tree.getiterator(tag='DOC'):
+        for tag in doc:
+            if tag.tag == 'SEG':
+                if tag.text is None:
+                    segments.append('')
+                else:
+                    segments.append(tag.text.strip())
     return segments
 
 def parse_moses(file):
