@@ -151,7 +151,7 @@ def evaluate(preds, refs, metrics):
         func = metrics[k]
         scores[k] = []
         for i in range(len(preds)):
-            scores[k].append(func([preds[i]], [refs[j][i] for j in range(n_refs)]))
+            scores[k].append(func([preds[i]], [[refs[j][i]] for j in range(n_refs)]))
     global_metrics = {k:metrics[k](preds, refs) for k in keys}
     return global_metrics, scores
 
@@ -216,13 +216,13 @@ def main():
     #     full_preds[-1].extend(next)
     #     prev_name = filename.split('_')[0]
     full_preds = [read_func(os.path.join(args.dir_preds, f)) for f in predictions]
-    models = [f.split('.')[0] for f in predictions]
+    models = [f.split('_')[0] for f in predictions]
     for preds, model in tqdm(zip(full_preds, models), desc="Evaluating",total=len(models)):
         try:
             global_scores, scores = evaluate(preds, refs, metrics)
             for k in global_scores.keys():
                 global_scores[k] = [global_scores[k]]
-            if 'beer' in metrics.keys():
+            if 'beer' in args.metrics:
                 beer, sent_scr = get_beer(preds, refs)
                 global_scores['beer'] = [beer]
                 scores['beer'] = sent_scr
@@ -249,15 +249,15 @@ def main():
         cluster_id = int(1)
         clusters = []
         for i in tqdm(range(len(register)-1),desc="Clustering " + metric):
+            clusters.append(cluster_id)
             this_row = register.iloc[i]
             next_row = register.iloc[i+1]
-            if this_row[main_metric] is None or next_row[main_metric] is None:
+            if this_row[metric] is None or next_row[metric] is None:
                 break
             diff = assess_differences(this_row['metrics'][metric], 
                                       next_row['metrics'][metric],
                                       trials=args.trials, 
                                       p_value=args.p_value)
-            clusters.append(cluster_id)
             if diff:
                 cluster_id += 1
         clusters.append(cluster_id)
