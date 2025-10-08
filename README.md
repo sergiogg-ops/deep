@@ -76,7 +76,7 @@ python eval.py demo/test_set/newstestB2020-ende-ref.de.sgm --source demo/test_se
 ```
 We have made available also the hypotheses that the proposals should generate en case that the user wants to avoid running the execution. They can execute just the evaluation by running the same command without the `--systems demo/proposals/` part. Even if their intention is just to try the visualization, the `results.csv` file is also available. To execute the visualization tool the user just need to run the following command:
 ```bash
-streamlit run display.py demo.csv mt
+streamlit run display.py demo/results.csv mt
 ```
 Copy the correspoding url to your favorite browser and navigate to it.
 
