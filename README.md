@@ -6,7 +6,7 @@ Before using the software it is important to run the `setup.sh` script:
 ```bash
 sh setup.sh
 ```
-Otherwise some functionalities won't work.
+Otherwise some functionalities won't work. Furthermore, to use the metric BEER the system need to have [java](https://www.java.com/en/download/manual.jsp) installed.
 
 ## Evaluation
 The evaluation of the systems can be done using the `eval.py` script: 
@@ -56,14 +56,29 @@ The results of the evaluation are stored in a `.csv` file with the specified nam
 
 ## Visualization
 The visualization is performed using a Streamlit web app. This is the command to launch it:
-```bash
-streamlit run [OPTIONS] display.py <evaluation_file.csv> [mt|dr]
 ```
-### Demo
-A demo of the visualization can be launched with the command:
+usage: streamlit run display.py [-h] filename {mt,dr}
+
+Display evaluation results
+
+positional arguments:
+  filename    Path to the CSV file containing evaluation results
+  {mt,dr}     Task of the experiment: mt for Machine Translation, dr for Handwritten Text
+              Recognition
+
+options:
+  -h, --help  show this help message and exit
+```
+## Demo
+A demo/tutorial for the machine translation (MT) task is available in the `demo` folder. To launch the execution+evaluation proccess, place yourself in the cloned repository directory and run the command:
+```bash
+python eval.py demo/test_set/newstestB2020-ende-ref.de.sgm --source demo/test_set/newstestB2020-ende-src.en.sgm --systems demo/proposals/ --dir_preds demo/hypotheses/ --output demo/results.csv --metrics bleu ter chrf --task mt --subtask demo
+```
+We have made available also the hypotheses that the proposals should generate en case that the user wants to avoid running the execution. They can execute just the evaluation by running the same command without the `--systems demo/proposals/` part. Even if their intention is just to try the visualization, the `results.csv` file is also available. To execute the visualization tool the user just need to run the following command:
 ```bash
 streamlit run display.py demo.csv mt
 ```
+Copy the correspoding url to your favorite browser and navigate to it.
 
 ## Git guide
 - `metrics.py`: contains the functions needed for scoring the hypotheses and runing automated randomized tests to check the statistical significance.
@@ -72,3 +87,4 @@ streamlit run display.py demo.csv mt
 - `setup.sh`: script that installs all the dependencies to execute the rest of functions of the application.
 - `demo.csv`: file that contains the results of an example evaluation.
 - `requirements.txt`: contains the python dependencies to execute the different parts of the pipeline.
+- `demo`: directory with the resources for the demo/tutorial. It contains the dockerized MT systems in the `demo/proposals` directory, the hypotheses they produce in the `demo/hypothesis` directory and the results of their evaluation in the `demo/results.csv` file. The test dataset is stored in the `demo/test_set` directory.

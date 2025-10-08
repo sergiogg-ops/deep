@@ -2,6 +2,7 @@ import pandas as pd
 import streamlit as st
 import altair as alt
 from seaborn import color_palette
+from argparse import ArgumentParser
 from sys import argv
 
 def get_metrics(list_columns):
@@ -142,19 +143,17 @@ def general_view(df):
                  use_container_width=True)
 
 def main():
-    if len(argv) != 3:
-      st.write("Usage: python display.py <filename.csv> <mode>")
-    filename = argv[1]
-    MODE = argv[2]
+    parser = ArgumentParser(description="Display evaluation results")
+    parser.add_argument('filename', type=str, help='Path to the CSV file containing evaluation results')
+    parser.add_argument('mode', type=str, choices=['mt', 'dr'], help='Task of the experiment: mt for Machine Translation, dr for Handwritten Text Recognition')
+    args = parser.parse_args()
 
+    MODE = args.mode
     if MODE == 'mt':
       st.title('Machine Translation Evaluation Results')
     elif MODE == 'dr':
       st.title('Handwritten Text Recognition Evaluation Results')
-    else:
-      print("Invalid mode. Available modes: ['mt', 'dr']")
-      exit(1)
-    df = pd.read_csv(filename)
+    df = pd.read_csv(args.filename)
 
     ##################
     # FILTERS
@@ -213,12 +212,44 @@ def main():
     #################################
     with st.expander("Show data", expanded=False):
       st.write(df)
-      st.download_button(
-          label="Download data",
-          data=df.to_csv(index=False).encode('utf-8'),
-          file_name='archer_results.csv',
-          mime='text/csv',
-      )
+      selector, button = st.columns(2, vertical_alignment='bottom')
+      with selector:
+        format = st.selectbox(
+            'Select the format to download the data',
+            ('CSV','LaTeX','JSON','HTML')
+        )
+      with button:
+        if format == 'CSV':
+          st.download_button(
+              label="Download",
+              data=df.to_csv(index=False).encode('utf-8'),
+              file_name='results.csv',
+              mime='text/csv',
+          )
+        elif format == 'LaTeX':
+          formatter = {m:'${:.2f}$' for m in get_metrics(df.columns)}
+          st.download_button(
+              label="Download",
+              data=df.to_latex(index=False, 
+                              column_format='l'*(len(df.columns)-1)+'r', 
+                              formatters=formatter).encode('utf-8'),
+              file_name='results.tex',
+              mime='text/latex',
+          )
+        elif format == 'JSON':
+          st.download_button(
+              label="Download",
+              data=df.to_json(orient='records', lines=True).encode('utf-8'),
+              file_name='results.json',
+              mime='application/json',
+          )
+        elif format == 'HTML':
+          st.download_button(
+              label="Download",
+              data=df.to_html(index=False).encode('utf-8'),
+              file_name='results.html',
+              mime='text/html',
+          )
 
 if __name__ == '__main__':
     main()
