@@ -23,7 +23,7 @@ def color_generator(categories, label='cluster', palette='crest'):
               domain=categories,
               range=palette
             ),
-            legend=alt.Legend(title="Cluster")
+            legend=alt.Legend(title="Rank")
          )
 
 def bar_leaderboard(df, metric, colors_cluster):
@@ -187,13 +187,15 @@ def main():
     #################
     with st.sidebar:
       st.header('Ranking')
-      leaderboard = df[['rank','name', f'cluster_{metric}']].copy()
+      leaderboard = df[['name', f'cluster_{metric}']].copy()
+      leaderboard['rank'] = leaderboard[f'cluster_{metric}']
+      leaderboard.drop(columns=[f'cluster_{metric}'], inplace=True)
       st.table(leaderboard.sort_values('rank').set_index('rank'))
 
     #################################
     # CHARTS
     #################################
-    bar_tab, scatter_tab, cluster_tab, time_tab = st.tabs(['Leader board', 'Quality vs Time', 'Clusters average', 'Time'])
+    bar_tab, scatter_tab, cluster_tab, time_tab = st.tabs(['Leader board', 'Quality vs Time', 'Rank average', 'Time'])
 
     with bar_tab:
       bar_leaderboard(df, metric, colors_cluster)
