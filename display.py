@@ -35,19 +35,19 @@ def bar_leaderboard(df, metric, colors_cluster):
 
     # Create a conditional rule definition
     rule = alt.Chart(df[df['comment'] == 'Baseline']).mark_rule(strokeDash=[8, 8], color='red', size=2).encode(
-        x=alt.X('name:N', sort=None, title='Participant'),
+        x=alt.X('name:N', sort=None, title='System'),
     )
 
     bar = (
         alt.Chart(df)
         .mark_bar(clip=True)
         .encode(
-            x=alt.X('name:N', sort=None, title='Participant'),
+            x=alt.X('name:N', sort=None, title='System'),
             y=alt.Y(f'{metric}:Q', title=f'{metric.upper()} Score', scale=alt.Scale(domain=[bottom, top])),
             color=colors_cluster,
             tooltip=['name', f'cluster_{metric}', f'{metric}'],
         )
-        .properties(title=f'{metric.upper()} by Participant', width=700, height=400)
+        .properties(title=f'{metric.upper()} by System', width=700, height=400)
     )
 
     # Layer the bar chart and the rule
@@ -108,7 +108,7 @@ def time_chart(df):
     Generate a time pie chart for the leaderboard.
     """
     df = df.sort_values('datetime')
-    legend = alt.Legend(title="Participant")
+    legend = alt.Legend(title="System")
     chart = (
         alt.Chart(df)
           .mark_arc(innerRadius=50, outerRadius=100)
@@ -136,7 +136,7 @@ def general_view(df):
                      ),
                      "scores": st.column_config.BarChartColumn(
                          "Scores",
-                         help="The scores for each participant",
+                         help="The scores for each system",
                      ),
                  },
                  hide_index=True,
@@ -166,10 +166,10 @@ def main():
         opt
     ).lower()
 
-    with st.expander("Filter proposals", expanded=False):
+    with st.expander("Filter systems", expanded=False):
         participants = df['name'].unique().tolist()
         selected_participants = st.multiselect(
-            'Select participants to display',
+            'Select Systems to display',
             participants,
             default=participants
         )
@@ -186,9 +186,9 @@ def main():
     # LEADER BOARD
     #################
     with st.sidebar:
-      st.header('Leader board')
-      leaderborad = df[['position','name', f'cluster_{metric}']].copy()
-      st.table(leaderborad.sort_values('position').set_index('position'))
+      st.header('Ranking')
+      leaderboard = df[['rank','name', f'cluster_{metric}']].copy()
+      st.table(leaderboard.sort_values('rank').set_index('rank'))
 
     #################################
     # CHARTS
