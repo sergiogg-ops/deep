@@ -113,7 +113,7 @@ def get_beer(x, y):
                                    stdout=subprocess.PIPE)
         beer, _ = process.communicate()
     except FileNotFoundError:
-        sys.stderr.write('Error: Beer requirement has not been satisfied.\n')
+        sys.stderr.write('Error: Beer not installed, please install it using setup.sh.\n')
         sys.exit(-1)
 
     # Delete aux files

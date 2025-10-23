@@ -89,7 +89,7 @@ def cluster_chart(df, metric, colors_cluster, mode):
       alt.Chart(cluster_df)
       .mark_bar(clip=True)
       .encode(
-          x=alt.X(f'cluster_{metric}:N', sort=None, title='Cluster'),
+          x=alt.X(f'cluster_{metric}:N', sort=None, title='Rank'),
           y=alt.Y(f'{metric}:Q', title=f'{metric.upper()} Score',scale=alt.Scale(domain=[bottom, top])),
           color=colors_cluster,
           tooltip=[f'cluster_{metric}',f'{metric}']
@@ -98,7 +98,7 @@ def cluster_chart(df, metric, colors_cluster, mode):
     )
 
     rule = alt.Chart(cluster_df[cluster_df['comment'] == 'Baseline']).mark_rule(strokeDash=[8, 8], color='red', size=2).encode(
-        x=alt.X(f'cluster_{metric}:N', sort=None, title='Cluster'),
+        x=alt.X(f'cluster_{metric}:N', sort=None, title='Rank'),
     )
     chart = alt.layer(bar, rule).configure_axisX(labelAngle=0)
     st.altair_chart(chart, use_container_width=True)

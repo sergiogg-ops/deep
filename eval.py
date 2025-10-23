@@ -242,7 +242,7 @@ def main():
     # Sort the participants by the corresponding score
     main_metric = 'bleu' if args.task == 'mt' else 'bwer'
     register = register.sort_values(by=[main_metric], ascending=False)
-    register['rank'] = [i+1 for i in range(len(register))]
+    register['position'] = [i+1 for i in range(len(register))]
 
     # Check the significance between the systems
     for metric in metrics.keys():
