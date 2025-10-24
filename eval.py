@@ -216,7 +216,7 @@ def main():
     #     full_preds[-1].extend(next)
     #     prev_name = filename.split('_')[0]
     full_preds = [read_func(os.path.join(args.dir_preds, f)) for f in predictions]
-    models = [f.split('_')[0] for f in predictions]
+    models = [f.split('.')[0] for f in predictions]
     for preds, model in tqdm(zip(full_preds, models), desc="Evaluating",total=len(models)):
         try:
             global_scores, scores = evaluate(preds, refs, metrics)
@@ -245,7 +245,8 @@ def main():
     register['position'] = [i+1 for i in range(len(register))]
 
     # Check the significance between the systems
-    for metric in metrics.keys():
+    applied_metrics = list(metrics.keys()) + ['beer'] if 'beer' in args.metrics else list(metrics.keys())
+    for metric in applied_metrics:
         cluster_id = int(1)
         clusters = []
         for i in tqdm(range(len(register)-1),desc="Clustering " + metric):
@@ -277,6 +278,6 @@ if __name__ == "__main__":
     global READ_FUNC
     READ_FUNC = {
         'mt': parse_xml,
-        'dr': read_dir
+        'dr': parse_xml
     }
     main()
