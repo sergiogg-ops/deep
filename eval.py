@@ -78,7 +78,7 @@ def check_paramaters(args):
             metrics[m] = get_bwer
     return models, refs, metrics
 
-def parse_xml(file):
+def parse_xml_mt(file):
     '''
     Parse the XML file and return the segments.
     Args:
@@ -92,17 +92,50 @@ def parse_xml(file):
         raise IOError(f"File {file} not found.")
     except SyntaxError:
         raise SyntaxError(f"File {file} is not well-formed.")
-
     root = tree.getroot()
+    
     segments = []
-    for doc in root: #tree.getiterator(tag='DOC'):
-        for tag in doc:
-            if tag.tag == 'SEG':
-                if tag.text is None:
-                    segments.append('')
-                else:
-                    segments.append(tag.text.strip())
-    return segments
+    for doc in root.findall('DOC'):
+        document = []
+        for seg in doc.findall('SEG'):
+            text = ''.join(seg.itertext()).strip()
+            document.append({'seg_id': int(seg.get('id')), 'text': text})
+        segments += sorted(document, key=lambda s: (s['seg_id']))
+
+    data = [s['text'] for s in segments]
+    return data
+
+def parse_xml_dr(file):
+    """
+    Reads an XML file and stores the text content of each 'page' element in a list.
+
+    Args:
+        file_path (str): The path to the XML file.
+
+    Returns:
+        list: A list of strings, where each string is the text content of a 'page' element.
+    """
+    try:
+        tree = ET.parse(file,  ET.XMLParser(recover=True))
+    except IOError:
+        raise IOError(f"File {file} not found.")
+    except SyntaxError:
+        raise SyntaxError(f"File {file} is not well-formed.")
+    root = tree.getroot()
+    
+    # Find all page elements
+    pages = root.findall('page')
+    
+    # Sort pages based on 'doc' (alphabetical) and 'n' (numerical) attributes
+    sorted_pages = sorted(pages, key=lambda p: (p.get('doc'), int(p.get('n'))))
+    
+    data = []
+    for page in sorted_pages:
+        # The text content of a page can be split into multiple parts, so we join them.
+        # We also strip whitespace from the beginning and end of the text.
+        text = ''.join(page.itertext()).strip()
+        data.append(text)
+    return data
 
 def parse_moses(file):
     '''
@@ -277,7 +310,7 @@ def main():
 if __name__ == "__main__":
     global READ_FUNC
     READ_FUNC = {
-        'mt': parse_xml,
-        'dr': parse_xml
+        'mt': parse_xml_mt,
+        'dr': parse_xml_dr
     }
     main()
