@@ -51,14 +51,20 @@ def check_paramaters(args):
         func = READ_FUNC[args.task]
         refs = []
         for dir in args.reference:
+            ids = []
             if os.path.isdir(dir):
                 refs.append([])
                 docs = os.listdir(dir)
                 docs.sort()
                 for doc in docs:
-                    refs[-1].extend(func(os.path.join(dir, doc)))
+                    r, i = func(os.path.join(dir, doc))
+                    refs[-1].extend(r)
+                    ids.extend(i)
+
             else:
-                refs.append(func(dir))
+                r, i = func(dir)
+                refs.append(r)
+                ids = i
     except FileNotFoundError:
         raise FileNotFoundError(f"Reference file {args.reference} not found.")
     if not os.path.exists(args.dir_preds):
@@ -76,9 +82,9 @@ def check_paramaters(args):
             metrics[m] = get_wer
         elif m == 'bwer':
             metrics[m] = get_bwer
-    return models, refs, metrics
+    return models, refs, ids, metrics
 
-def parse_xml(file):
+def parse_xml_mt(file):
     '''
     Parse the XML file and return the segments.
     Args:
@@ -92,17 +98,55 @@ def parse_xml(file):
         raise IOError(f"File {file} not found.")
     except SyntaxError:
         raise SyntaxError(f"File {file} is not well-formed.")
-
     root = tree.getroot()
+    
     segments = []
-    for doc in root: #tree.getiterator(tag='DOC'):
-        for tag in doc:
-            if tag.tag == 'SEG':
-                if tag.text is None:
-                    segments.append('')
-                else:
-                    segments.append(tag.text.strip())
-    return segments
+    for doc in root.findall('DOC'):
+        document = []
+        for seg in doc.findall('SEG'):
+            text = seg.text.strip() if seg.text is not None else ''
+            document.append({'seg_id': f"{doc.get('DocId')}_{seg.get('id')}", 'text': text})
+            #document.append({'seg_id': int(seg.get('id')), 'text': text})
+        #segments += sorted(document, key=lambda s: (s['seg_id']))
+        segments += document
+
+    data = [s['text'] for s in segments]
+    ids = [s['seg_id'] for s in segments]
+    return data, ids
+
+def parse_xml_dr(file):
+    """
+    Reads an XML file and stores the text content of each 'page' element in a list.
+
+    Args:
+        file_path (str): The path to the XML file.
+
+    Returns:
+        list: A list of strings, where each string is the text content of a 'page' element.
+    """
+    try:
+        tree = ET.parse(file,  ET.XMLParser(recover=True))
+    except IOError:
+        raise IOError(f"File {file} not found.")
+    except SyntaxError:
+        raise SyntaxError(f"File {file} is not well-formed.")
+    root = tree.getroot()
+    
+    # Find all page elements
+    pages = root.findall('page')
+    
+    # Sort pages based on 'doc' (alphabetical) and 'n' (numerical) attributes
+    #sorted_pages = sorted(pages, key=lambda p: (p.get('doc'), int(p.get('n'))))
+    
+    data = []
+    ids = []
+    for page in pages:
+        # The text content of a page can be split into multiple parts, so we join them.
+        # We also strip whitespace from the beginning and end of the text.
+        text = ''.join(page.itertext()).strip()
+        data.append(text)
+        ids.append(f"{page.get('doc')}_{page.get('n')}")
+    return data, ids
 
 def parse_moses(file):
     '''
@@ -132,6 +176,20 @@ def read_dir(dirname):
             texts.append(f.readlines()[0])
     return texts
 
+def filter_samples(samples, ids, ref_ids):
+    '''
+    Filter the samples to keep only those with ids in ref_ids.
+    Args:
+        samples: list of segments
+        ids: list of segment ids
+        ref_ids: list of reference segment ids
+    Returns:
+        filtered_samples: list of filtered segments
+    '''
+    samples = {id: sample for id, sample in zip(ids, samples)}
+    filtered_samples = [samples.get(id, '') for id in ref_ids]
+    return filtered_samples
+
 def evaluate(preds, refs, metrics):
     '''
     Evaluate the translations using the specified metrics.
@@ -145,6 +203,8 @@ def evaluate(preds, refs, metrics):
     '''
     scores = {}
     n_refs = len(refs)
+    if len(preds) != len(refs[0]):
+        raise ValueError(f"Number of predictions ({len(preds)}) and references ({len(refs[0])}) do not match.")
     keys = list(metrics.keys())
     keys.sort()
     for k in keys:
@@ -187,7 +247,7 @@ def run_tests(models, models_dir, sources, dir_preds):
 
 def main():
     args = read_parameters()
-    models, refs, metrics = check_paramaters(args)
+    models, refs, ref_ids, metrics = check_paramaters(args)
     # print('############################')
     # print([len(r) for r in refs])
     # print('############################')
@@ -205,8 +265,8 @@ def main():
     predictions = os.listdir(args.dir_preds)
     predictions.sort()
     full_preds, models = [], []
-    prev_name = ''
     read_func = READ_FUNC[args.task]
+    # prev_name = ''
     # for filename in predictions:
     #     prefix = filename.split('_')[0]
     #     if prefix != prev_name:
@@ -216,7 +276,13 @@ def main():
     #     full_preds[-1].extend(next)
     #     prev_name = filename.split('_')[0]
     full_preds = [read_func(os.path.join(args.dir_preds, f)) for f in predictions]
-    models = [f.split('_')[0] for f in predictions]
+    # print([len(fp[0]) for fp in full_preds])
+    # print([sum([len(p) for p in fp]) for fp, _ in full_preds])
+    full_preds = [filter_samples(full_preds[i][0], full_preds[i][1], ref_ids) for i in range(len(full_preds))]
+    # print([len(fp) for fp in full_preds])
+    # print([sum([len(p) for p in fp]) for fp in full_preds])
+    models = [f.split('.')[0] for f in predictions]
+
     for preds, model in tqdm(zip(full_preds, models), desc="Evaluating",total=len(models)):
         try:
             global_scores, scores = evaluate(preds, refs, metrics)
@@ -227,9 +293,13 @@ def main():
                 global_scores['beer'] = [beer]
                 scores['beer'] = sent_scr
             global_scores['metrics'] = [scores] # sentence scores to asses the significance of the differences
+        except ValueError as e:
+            global_scores = {k: [None] for k in metrics.keys()}
+            global_scores['metrics'] = [{k: [None] for k in metrics.keys()}]
+            print(f"Error evaluating {model}: {e}")
         except Exception as e:
             global_scores = {k: [None] for k in metrics.keys()}
-            global_scores['metrics'] = [None]
+            global_scores['metrics'] = [{k: [None] for k in metrics.keys()}]
             print(f"Error evaluating {model}: {e}")
         global_scores['name'] = [model]
         global_scores['datetime'] = [pd.Timestamp.now()]
@@ -240,19 +310,22 @@ def main():
         register = pd.concat([register, pd.DataFrame(global_scores)],ignore_index=True)
     
     # Sort the participants by the corresponding score
-    main_metric = 'bleu' if args.task == 'mt' else 'bwer'
-    register = register.sort_values(by=[main_metric], ascending=False)
+    if args.task == 'mt':
+        register.sort_values(by=['bleu'], ascending=False, inplace=True)
+    else:
+        register.sort_values(by=['bwer'], ascending=True, inplace=True)
     register['position'] = [i+1 for i in range(len(register))]
 
     # Check the significance between the systems
-    for metric in metrics.keys():
+    applied_metrics = list(metrics.keys()) + ['beer'] if 'beer' in args.metrics else list(metrics.keys())
+    for metric in applied_metrics:
         cluster_id = int(1)
         clusters = []
         for i in tqdm(range(len(register)-1),desc="Clustering " + metric):
             clusters.append(cluster_id)
             this_row = register.iloc[i]
             next_row = register.iloc[i+1]
-            if this_row[metric] is None or next_row[metric] is None:
+            if pd.isna(this_row[metric]) or pd.isna(next_row[metric]):
                 break
             diff = assess_differences(this_row['metrics'][metric], 
                                       next_row['metrics'][metric],
@@ -276,7 +349,7 @@ def main():
 if __name__ == "__main__":
     global READ_FUNC
     READ_FUNC = {
-        'mt': parse_xml,
-        'dr': read_dir
+        'mt': parse_xml_mt,
+        'dr': parse_xml_dr
     }
     main()

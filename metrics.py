@@ -62,7 +62,7 @@ def get_wer(x, y):
         e, l = fastwer.compute(sent_x, sent_y, char_level=False)
         edits += e
         lengths += l
-    return 100 * edits / lengths if lengths > 0 else 0
+    return 100 * edits / lengths
 
 def wer_norm(x):
     x = normalize('NFC', x)
@@ -89,7 +89,7 @@ def get_bwer(x, y):
         scr = fastwer.bagOfWords(sent_x, sent_y, char_level=False)[0]
         dfa = abs(len(sent_x.split()) - len(sent_y.split()))
         global_scr += (scr - dfa) // 2 + dfa
-        glob_ref_wl += len(sent_x.split())
+        glob_ref_wl += len(sent_y.split())
     return 100 * global_scr / glob_ref_wl
 
 def get_beer(x, y):
