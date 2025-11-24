@@ -2,9 +2,11 @@ import argparse
 import os
 import pandas as pd
 import lxml.etree as ET
+import yaml
 from metrics import *
 from tqdm import tqdm
 from time import time
+import numpy as np
 
 def read_parameters():
     parser = argparse.ArgumentParser(description='Evaluates the participant dockerized models. They need to produce the hypotheses of the source file in the same format as the reference(s) file(s).')
@@ -160,6 +162,20 @@ def parse_moses(file):
         segments = f.readlines()
     return segments
 
+def parse_yaml(file):
+    '''
+    Parse the YAML file and return the segments.
+    Args:
+        file: path to the YAML file
+    Returns:
+        segments: list of segments
+    '''
+    with open(file, 'r') as f:
+        data = yaml.safe_load(f)
+    ids = sorted(data.keys())
+    segments = ['\n'.join(data[id]['text']) for id in ids]
+    return segments, ids
+
 def read_dir(dirname):
     '''
     Read the directory and return the text of each file.
@@ -266,21 +282,8 @@ def main():
     predictions.sort()
     full_preds, models = [], []
     read_func = READ_FUNC[args.task]
-    # prev_name = ''
-    # for filename in predictions:
-    #     prefix = filename.split('_')[0]
-    #     if prefix != prev_name:
-    #         full_preds.append([])
-    #         models.append(prefix)
-    #     next = read_func(os.path.join(args.dir_preds, filename))
-    #     full_preds[-1].extend(next)
-    #     prev_name = filename.split('_')[0]
     full_preds = [read_func(os.path.join(args.dir_preds, f)) for f in predictions]
-    # print([len(fp[0]) for fp in full_preds])
-    # print([sum([len(p) for p in fp]) for fp, _ in full_preds])
     full_preds = [filter_samples(full_preds[i][0], full_preds[i][1], ref_ids) for i in range(len(full_preds))]
-    # print([len(fp) for fp in full_preds])
-    # print([sum([len(p) for p in fp]) for fp in full_preds])
     models = [f.split('.')[0] for f in predictions]
 
     for preds, model in tqdm(zip(full_preds, models), desc="Evaluating",total=len(models)):
@@ -349,7 +352,7 @@ def main():
 if __name__ == "__main__":
     global READ_FUNC
     READ_FUNC = {
-        'mt': parse_xml_mt,
-        'dr': parse_xml_dr
+        'mt': parse_yaml,
+        'dr': parse_yaml
     }
     main()

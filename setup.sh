@@ -2,9 +2,7 @@
 # FastWER calculation
 pip install -r requirements.txt
 git clone https://github.com/PRHLT/fastwer.git
-cd fastwer
-python setup.py install
-cd ..
+pip install ./fastwer
 
 # BEER installation
 wget https://raw.githubusercontent.com/stanojevic/beer/master/packaged/beer_2.0.tar.gz
