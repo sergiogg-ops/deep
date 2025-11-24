@@ -1,12 +1,17 @@
 import os
 import sys
+import torch
 import sacrebleu
 import fastwer
 import subprocess
+import tempfile
 from time import time
 from re import sub, findall
 from unicodedata import normalize
 from art import aggregators, scores, significance_tests
+from cleanfid import fid
+from skimage.metrics import structural_similarity as ssim
+from PIL import Image
 
 def get_bleu(x, y):
     '''
@@ -123,6 +128,43 @@ def get_beer(x, y):
     beer = [float(s) for s in findall(r"score is ([0-9.]+)", beer)]
     return  sum(beer) / len(beer), beer
 
+def get_fid(x, y):
+    '''
+    Compute the FID score between two lists of images.
+    Args:
+        x: list of generated images (numpy arrays)
+        y: list of reference images (numpy arrays)
+    Returns:
+        fid: FID score
+    '''
+    with tempfile.TemporaryDirectory() as src_dir, \
+         tempfile.TemporaryDirectory() as ref_dir:
+        for i,img in enumerate(x):
+            Image.fromarray(img).save(os.path.join(src_dir, f"image{i}.png"))
+        for i,img in enumerate(y[0]):
+            Image.fromarray(img).save(os.path.join(ref_dir, f"image{i}.png"))
+        
+        return fid.compute_fid(src_dir, 
+                               ref_dir, 
+                               mode="clean", 
+                               device="cuda" if torch.cuda.is_available() else "cpu")
+
+def get_ssim(x, y):
+    '''
+    Compute the SSIM score between two lists of images.
+    Args:
+        x: list of generated images (numpy arrays)
+        y: list of reference images (numpy arrays)
+    Returns:
+        ssim_score: SSIM score
+    '''
+    ssim_scores = []
+    y = y[0]
+    for img_x, img_y in zip(x, y):
+        score = ssim(img_x, img_y, channel_axis=2, data_range=img_y.max() - img_y.min())
+        ssim_scores.append(score)
+    return sum(ssim_scores) / len(ssim_scores)
+
 def save_to_file(sentences):
     file = '/tmp/' + str(time()) + '_archer'
     with open(file, 'w') as f:
@@ -149,3 +191,14 @@ def assess_differences(a_scores, b_scores, trials, p_value):
     run_val = test.run()
     #print(f"Approximate Randomization Test: {run_val} (p-value: {p_value})")
     return run_val < p_value
+
+METRICS = {
+    'bleu': get_bleu,
+    'ter': get_ter,
+    'chrf': get_chrf,
+    'wer': get_wer,
+    'bwer': get_bwer,
+    'beer': get_beer,
+    'fid': get_fid,
+    'ssim': get_ssim
+}

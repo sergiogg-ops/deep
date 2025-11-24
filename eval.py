@@ -6,6 +6,7 @@ import yaml
 from metrics import *
 from tqdm import tqdm
 from time import time
+from PIL import Image
 import numpy as np
 
 def read_parameters():
@@ -17,10 +18,12 @@ def read_parameters():
     parser.add_argument('--baselines', type=str, nargs='+', default=[], help='List of baseline systems to be evaluated. Must be included among the rest of the systems')
     parser.add_argument('--output', type=str, default='results.csv', help='Path to the file that will store the leaderboard')
     parser.add_argument('-a','--append', action='store_true', help='Append the results to the output file')
-    parser.add_argument('--metrics', type=str, nargs='+', default=['bleu', 'ter'], choices=['bleu', 'ter','chrf','beer','wer','bwer'], help='List of metrics to be used (default: BLEU and TER)')
+    parser.add_argument('--metrics', type=str, nargs='+',required=True, choices=list(METRICS.keys()), help='List of metrics to be used (default: BLEU and TER)')
+    parser.add_argument('--main_metric', type=str, help='Main metric to sort the leaderboard (default: bleu for MT and bwer for DR)')
+    parser.add_argument('--ascending', action='store_true', help='Sort the leaderboard in ascending order (default: descending)')
     parser.add_argument('--trials', type=int, default=10000, help='Number of trials for the ART (default: 10000)')
     parser.add_argument('--p_value', type=float, default=0.05, help='P-value for the ART (default: 0.05)')
-    parser.add_argument('--task', type=str, required=True, choices=['mt','dr'], help='Task to be evaluated: mt (machine translation) or dr (document recognition)')
+    parser.add_argument('--task', type=str, required=True, choices=['mt','dr','img'], help='Task to be evaluated: mt (machine translation) or dr (document recognition)')
     parser.add_argument('--subtask', type=str, required=True, help='Subtask to be evaluated')
     args = parser.parse_args()
     return args
@@ -50,23 +53,28 @@ def check_paramaters(args):
                 raise FileNotFoundError(f"Source file {src} not found.")
     # Check if the reference file exists
     try:
-        func = READ_FUNC[args.task]
-        refs = []
-        for dir in args.reference:
-            ids = []
-            if os.path.isdir(dir):
-                refs.append([])
-                docs = os.listdir(dir)
-                docs.sort()
-                for doc in docs:
-                    r, i = func(os.path.join(dir, doc))
-                    refs[-1].extend(r)
-                    ids.extend(i)
-
-            else:
-                r, i = func(dir)
-                refs.append(r)
-                ids = i
+        if args.task == 'img':
+            refs = []
+            for dir in args.reference:
+                images, ids = read_img_dir(dir)
+                refs.append(images)
+        else:
+            func = READ_FUNC[args.task]
+            refs = []
+            for dir in args.reference:
+                ids = []
+                if os.path.isdir(dir):
+                    refs.append([])
+                    docs = os.listdir(dir)
+                    docs.sort()
+                    for doc in docs:
+                        r, i = func(os.path.join(dir, doc))
+                        refs[-1].extend(r)
+                        ids.extend(i)
+                else:
+                    r, i = func(dir)
+                    refs.append(r)
+                    ids = i
     except FileNotFoundError:
         raise FileNotFoundError(f"Reference file {args.reference} not found.")
     if not os.path.exists(args.dir_preds):
@@ -74,16 +82,8 @@ def check_paramaters(args):
     # Obtain the functions for the metrics
     metrics = {}
     for m in args.metrics:
-        if m == 'bleu':
-            metrics[m] = get_bleu
-        elif m == 'ter':
-            metrics[m] = get_ter
-        elif m == 'chrf':
-            metrics[m] = get_chrf
-        elif m == 'wer':
-            metrics[m] = get_wer
-        elif m == 'bwer':
-            metrics[m] = get_bwer
+        if m != 'beer' and m != 'fid':
+            metrics[m] = METRICS[m]
     return models, refs, ids, metrics
 
 def parse_xml_mt(file):
@@ -176,6 +176,23 @@ def parse_yaml(file):
     segments = ['\n'.join(data[id]['text']) for id in ids]
     return segments, ids
 
+def read_img_dir(dirname):
+    '''
+    Read the directory and return the images as numpy arrays.
+    Args:
+        dirname: path to the directory
+    Returns:
+        images: list of numpy arrays
+    '''
+    ids = [f for f in os.listdir(dirname) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+    images = []
+    for filename in sorted(ids):
+        img = Image.open(os.path.join(dirname, filename)).convert('RGB')
+        img = np.array(img)#.transpose(2,0,1)
+        images.append(img)
+    return images, ids
+
+
 def read_dir(dirname):
     '''
     Read the directory and return the text of each file.
@@ -192,7 +209,7 @@ def read_dir(dirname):
             texts.append(f.readlines()[0])
     return texts
 
-def filter_samples(samples, ids, ref_ids):
+def filter_samples(samples, ids, ref_ids, null_token=''):
     '''
     Filter the samples to keep only those with ids in ref_ids.
     Args:
@@ -203,7 +220,7 @@ def filter_samples(samples, ids, ref_ids):
         filtered_samples: list of filtered segments
     '''
     samples = {id: sample for id, sample in zip(ids, samples)}
-    filtered_samples = [samples.get(id, '') for id in ref_ids]
+    filtered_samples = [samples.get(id, null_token) for id in ref_ids]
     return filtered_samples
 
 def evaluate(preds, refs, metrics):
@@ -283,27 +300,30 @@ def main():
     full_preds, models = [], []
     read_func = READ_FUNC[args.task]
     full_preds = [read_func(os.path.join(args.dir_preds, f)) for f in predictions]
-    full_preds = [filter_samples(full_preds[i][0], full_preds[i][1], ref_ids) for i in range(len(full_preds))]
+    full_preds = [filter_samples(full_preds[i][0], full_preds[i][1], ref_ids, NULL_TOKEN[args.task]) for i in range(len(full_preds))]
     models = [f.split('.')[0] for f in predictions]
 
     for preds, model in tqdm(zip(full_preds, models), desc="Evaluating",total=len(models)):
-        try:
-            global_scores, scores = evaluate(preds, refs, metrics)
-            for k in global_scores.keys():
-                global_scores[k] = [global_scores[k]]
-            if 'beer' in args.metrics:
-                beer, sent_scr = get_beer(preds, refs)
-                global_scores['beer'] = [beer]
-                scores['beer'] = sent_scr
-            global_scores['metrics'] = [scores] # sentence scores to asses the significance of the differences
-        except ValueError as e:
-            global_scores = {k: [None] for k in metrics.keys()}
-            global_scores['metrics'] = [{k: [None] for k in metrics.keys()}]
-            print(f"Error evaluating {model}: {e}")
-        except Exception as e:
-            global_scores = {k: [None] for k in metrics.keys()}
-            global_scores['metrics'] = [{k: [None] for k in metrics.keys()}]
-            print(f"Error evaluating {model}: {e}")
+        #try:
+        global_scores, scores = evaluate(preds, refs, metrics)
+        for k in global_scores.keys():
+            global_scores[k] = [global_scores[k]]
+        if 'beer' in args.metrics:
+            beer, sent_scr = get_beer(preds, refs)
+            global_scores['beer'] = [beer]
+            scores['beer'] = sent_scr
+        if 'fid' in args.metrics:
+            fid = get_fid(preds, refs)
+            global_scores['fid'] = [fid]
+        global_scores['metrics'] = [scores] # sentence scores to asses the significance of the differences
+        # except ValueError as e:
+        #     global_scores = {k: [None] for k in metrics.keys()}
+        #     global_scores['metrics'] = [{k: [None] for k in metrics.keys()}]
+        #     print(f"Error evaluating {model}: {e}")
+        # except Exception as e:
+        #     global_scores = {k: [None] for k in metrics.keys()}
+        #     global_scores['metrics'] = [{k: [None] for k in metrics.keys()}]
+        #     print(f"Error evaluating {model}: {e}")
         global_scores['name'] = [model]
         global_scores['datetime'] = [pd.Timestamp.now()]
         global_scores['task'] = [args.task]
@@ -313,10 +333,9 @@ def main():
         register = pd.concat([register, pd.DataFrame(global_scores)],ignore_index=True)
     
     # Sort the participants by the corresponding score
-    if args.task == 'mt':
-        register.sort_values(by=['bleu'], ascending=False, inplace=True)
-    else:
-        register.sort_values(by=['bwer'], ascending=True, inplace=True)
+    register.sort_values(by=args.main_metric if args.main_metric else list(metrics.keys())[0],
+                         ascending=args.ascending,
+                         inplace=True)
     register['position'] = [i+1 for i in range(len(register))]
 
     # Check the significance between the systems
@@ -353,6 +372,11 @@ if __name__ == "__main__":
     global READ_FUNC
     READ_FUNC = {
         'mt': parse_yaml,
-        'dr': parse_yaml
+        'dr': parse_yaml,
+        'img': read_img_dir
     }
+    NULL_TOKEN = {
+        'mt': '',
+        'dr': '',
+        'img': np.array([])}
     main()
