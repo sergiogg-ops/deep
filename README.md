@@ -14,7 +14,7 @@ Otherwise some functionalities won't work. Furthermore, to use the metric BEER t
 - [x] Image generation evaluation.
   - [x] SSIM
   - [x] FID
-- [] Image generation execution.
+- [ ] Image generation execution.
 
 ## Evaluation
 The evaluation of the systems can be done using the `eval.py` script: 
