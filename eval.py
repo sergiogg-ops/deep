@@ -352,6 +352,8 @@ def main():
         global_scores['comment'] = ['Baseline' if global_scores['name'][0] in args.baselines else '']
         global_scores['time'] = [run_times.get(global_scores['name'][0], 0)]
         register = pd.concat([register, pd.DataFrame(global_scores)],ignore_index=True)
+    if 'wer' in metrics or 'bwer' in metrics:
+        os.system("rm -rf fastwer/tmp")
     
     # Sort the participants by the corresponding score
     register.sort_values(by=args.main_metric if args.main_metric else list(metrics.keys())[0],
