@@ -75,7 +75,7 @@ def scatter_chart(df,metric, colors_cluster):
     )
     st.altair_chart(chart, use_container_width=True)
 
-def cluster_chart(df, metric, colors_cluster, mode):
+def cluster_chart(df, metric, colors_cluster):
     """
     Generate a cluster chart for the leaderboard.
     """
@@ -145,21 +145,20 @@ def general_view(df):
 def main():
     parser = ArgumentParser(description="Display evaluation results")
     parser.add_argument('filename', type=str, help='Path to the CSV file containing evaluation results')
-    parser.add_argument('mode', type=str, choices=['mt', 'dr'], help='Task of the experiment: mt for Machine Translation, dr for Handwritten Text Recognition')
     args = parser.parse_args()
 
-    MODE = args.mode
-    if MODE == 'mt':
-      st.title('Machine Translation Evaluation Results')
-    elif MODE == 'dr':
-      st.title('Handwritten Text Recognition Evaluation Results')
+    # MODE = args.mode
+    # if MODE == 'mt':
+    #   st.title('Machine Translation Evaluation Results')
+    # elif MODE == 'dr':
+    #   st.title('Handwritten Text Recognition Evaluation Results')
     df = pd.read_csv(args.filename)
+    st.title('Evaluation Results Dashboard')
 
     ##################
     # FILTERS
     ##################
-    # Select main metric
-    #opt = ('BLEU', 'TER') if MODE == 'mt' else ('BWER', 'WER')
+    # Select metric
     opt = tuple(m.upper() for m in get_metrics(df.columns))
     metric = st.selectbox(
         'Select the metric to display',
@@ -204,7 +203,7 @@ def main():
       scatter_chart(df, metric, colors_cluster)
 
     with cluster_tab:
-      cluster_chart(df, metric, colors_cluster, MODE)
+      cluster_chart(df, metric, colors_cluster)
 
     with time_tab:
       time_chart(df)
