@@ -23,7 +23,7 @@ def read_parameters():
     parser.add_argument('--ascending', action='store_true', help='Sort the leaderboard in ascending order (default: descending)')
     parser.add_argument('--trials', type=int, default=10000, help='Number of trials for the ART (default: 10000)')
     parser.add_argument('--p_value', type=float, default=0.05, help='P-value for the ART (default: 0.05)')
-    parser.add_argument('--task', type=str, required=True, choices=['mt','ocr','img','t_det'], help='Task to be evaluated: mt (machine translation) or dr (document recognition)')
+    parser.add_argument('--task', type=str, required=True, choices=['mt','ocr','img','t_det'], help='Task to be evaluated: mt (machine translation), ocr (optical character recognition), img (image generation), t_det (text detection)')
     parser.add_argument('--subtask', type=str, required=True, help='Subtask to be evaluated')
     args = parser.parse_args()
     return args
@@ -298,9 +298,6 @@ def run_tests(models, models_dir, sources, dir_preds):
 def main():
     args = read_parameters()
     models, refs, ref_ids, metrics = check_paramaters(args)
-    # print('############################')
-    # print([len(r) for r in refs])
-    # print('############################')
     
     # Translate the sources
     if models:
@@ -322,11 +319,6 @@ def main():
     full_preds = [read_func(os.path.join(args.dir_preds, f)) for f in predictions]
     full_preds = [filter_samples(full_preds[i][0], full_preds[i][1], ref_ids, NULL_TOKEN[args.task]) for i in range(len(full_preds))]
     models = [f.split('.')[0] for f in predictions]
-    # print(ref_ids[0])
-    # print(refs[0][0])
-    # print('+++')
-    # refs = [refs[0][:1]]
-    # full_preds = [full_preds[i][:1] for i in range(len(full_preds))]
 
     for preds, model in tqdm(zip(full_preds, models), desc="Evaluating",total=len(models)):
         try:

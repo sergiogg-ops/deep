@@ -1,7 +1,7 @@
 # DEEP: Docker-based Evaluation and Execution Platform
 🚨⚠️🚧 **Experimental branch** 🚧⚠️🚨
 ![Screenshot of the visual interface](images/screenshot.png)
-This git contains a pipeline for automated execution of systems and evaluation of Machine Translation (MT) and Handwriten Text Recognition (HTR) systems. After the evaluation we also provide a visualization web-app to analyse the results.
+This git contains a pipeline for automated execution of systems and evaluation of Machine Translation (MT) and Optical Character Recognition (OCR) systems. After the evaluation we also provide a visualization web-app to analyse the results.
 
 Before using the software it is important to create a conda environment and run the `setup.sh` script:
 ```bash
@@ -57,8 +57,9 @@ options:
   --trials TRIALS       Number of trials for the ART (default: 10000)
   --p_value P_VALUE     P-value for the ART (default: 0.05)
   --task {mt,ocr,img,t_det}
-                        Task to be evaluated: mt (machine translation) or dr (document
-                        recognition)
+                        Task to be evaluated: mt (machine translation), ocr (optical
+                        character recognition), img (image generation), t_det (text
+                        detection)
   --subtask SUBTASK     Subtask to be evaluated
 ```
 Each system must be dockerized and prepared to be runned appropiately. It must read the `data/source.sgm` file and write the corresponding translations in the `data/predictions.sgm` file of the docker container. The `eval.py` script will read the predictions, store them in a directory, evaluate each one with the specified metrics and clusterize the submissions. 
