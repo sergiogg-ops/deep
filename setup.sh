@@ -1,6 +1,6 @@
 # !/bin/bash
 # FastWER calculation
-pip install -r requirements.txt
+# install -r requirements.txt
 git clone https://github.com/PRHLT/fastwer.git
 pip install ./fastwer
 

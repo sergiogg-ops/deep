@@ -23,7 +23,7 @@ def read_parameters():
     parser.add_argument('--ascending', action='store_true', help='Sort the leaderboard in ascending order (default: descending)')
     parser.add_argument('--trials', type=int, default=10000, help='Number of trials for the ART (default: 10000)')
     parser.add_argument('--p_value', type=float, default=0.05, help='P-value for the ART (default: 0.05)')
-    parser.add_argument('--task', type=str, required=True, choices=['mt','dr','img'], help='Task to be evaluated: mt (machine translation) or dr (document recognition)')
+    parser.add_argument('--task', type=str, required=True, choices=['mt','ocr','img','t_det'], help='Task to be evaluated: mt (machine translation), ocr (optical character recognition), img (image generation), t_det (text detection)')
     parser.add_argument('--subtask', type=str, required=True, help='Subtask to be evaluated')
     args = parser.parse_args()
     return args
@@ -176,6 +176,23 @@ def parse_yaml(file):
     segments = ['\n'.join(data[id]['text']) for id in ids]
     return segments, ids
 
+def parse_bbox_yaml(file):
+    '''
+    Parse the YAML file and return the bounding boxes.
+    Args:
+        file: path to the YAML file
+    Returns:
+        bboxes: list of bounding boxes
+    '''
+    with open(file, 'r') as f:
+        data = yaml.safe_load(f)
+    names = sorted(data.keys())
+    ids, boxes = [], []
+    for id in names:
+        boxes.extend(data[id]['bboxes'])
+        ids.extend([f"{id}_{i}" for i in range(len(data[id]['bboxes']))])
+    return boxes, ids
+
 def read_img_dir(dirname):
     '''
     Read the directory and return the images as numpy arrays.
@@ -281,12 +298,12 @@ def run_tests(models, models_dir, sources, dir_preds):
 def main():
     args = read_parameters()
     models, refs, ref_ids, metrics = check_paramaters(args)
-    # print('############################')
-    # print([len(r) for r in refs])
-    # print('############################')
     
     # Translate the sources
     if models:
+        if args.task == 'img': # TODO: image generation execution not supported yet
+            print('Image generation is an experimental feature and running the models is not supported yet. Please provide the predictions in the dir_preds directory.\nTo run the full functionality keep informed about future updates.')
+            exit(1)
         models.sort()
         run_times = run_tests(models, args.systems, args.source, args.dir_preds)
         run_times = {model: run_times[i] for i, model in enumerate(models)}
@@ -304,26 +321,22 @@ def main():
     models = [f.split('.')[0] for f in predictions]
 
     for preds, model in tqdm(zip(full_preds, models), desc="Evaluating",total=len(models)):
-        #try:
-        global_scores, scores = evaluate(preds, refs, metrics)
-        for k in global_scores.keys():
-            global_scores[k] = [global_scores[k]]
-        if 'beer' in args.metrics:
-            beer, sent_scr = get_beer(preds, refs)
-            global_scores['beer'] = [beer]
-            scores['beer'] = sent_scr
-        if 'fid' in args.metrics:
-            fid = get_fid(preds, refs)
-            global_scores['fid'] = [fid]
-        global_scores['metrics'] = [scores] # sentence scores to asses the significance of the differences
-        # except ValueError as e:
-        #     global_scores = {k: [None] for k in metrics.keys()}
-        #     global_scores['metrics'] = [{k: [None] for k in metrics.keys()}]
-        #     print(f"Error evaluating {model}: {e}")
-        # except Exception as e:
-        #     global_scores = {k: [None] for k in metrics.keys()}
-        #     global_scores['metrics'] = [{k: [None] for k in metrics.keys()}]
-        #     print(f"Error evaluating {model}: {e}")
+        try:
+            global_scores, scores = evaluate(preds, refs, metrics)
+            for k in global_scores.keys():
+                global_scores[k] = [global_scores[k]]
+            if 'beer' in args.metrics:
+                beer, sent_scr = METRICS['beer'](preds, refs)
+                global_scores['beer'] = [beer]
+                scores['beer'] = sent_scr
+            if 'fid' in args.metrics:
+                fid = METRICS['fid'](preds, refs)
+                global_scores['fid'] = [fid]
+            global_scores['metrics'] = [scores] # sentence scores to asses the significance of the differences
+        except Exception as e:
+            global_scores = {k: [None] for k in metrics.keys()}
+            global_scores['metrics'] = [{k: [None] for k in metrics.keys()}]
+            print(f"Error evaluating {model}: {e}")
         global_scores['name'] = [model]
         global_scores['datetime'] = [pd.Timestamp.now()]
         global_scores['task'] = [args.task]
@@ -331,6 +344,8 @@ def main():
         global_scores['comment'] = ['Baseline' if global_scores['name'][0] in args.baselines else '']
         global_scores['time'] = [run_times.get(global_scores['name'][0], 0)]
         register = pd.concat([register, pd.DataFrame(global_scores)],ignore_index=True)
+    if 'wer' in metrics or 'bwer' in metrics:
+        os.system("rm -rf fastwer/tmp")
     
     # Sort the participants by the corresponding score
     register.sort_values(by=args.main_metric if args.main_metric else list(metrics.keys())[0],
@@ -363,20 +378,23 @@ def main():
     # Save the results
     register = register.drop(columns=['metrics'])
     if args.append:
-        register.to_csv(args.output, mode='a', header=False, index=False)
+        register.to_csv(args.output, mode='a', header=False, index=False, float_format='%.4f')
     else:
-        register.to_csv(args.output, mode='w', header=True, index=False)
+        register.to_csv(args.output, mode='w', header=True, index=False, float_format='%.4f')
     print(f"Results saved to {args.output}")
 
 if __name__ == "__main__":
     global READ_FUNC
     READ_FUNC = {
         'mt': parse_yaml,
-        'dr': parse_yaml,
-        'img': read_img_dir
+        'ocr': parse_yaml,
+        'img': read_img_dir,
+        't_det': parse_bbox_yaml
     }
     NULL_TOKEN = {
         'mt': '',
-        'dr': '',
-        'img': np.array([])}
+        'ocr': '',
+        'img': np.zeros((512,512,3), dtype=np.uint8),
+        't_det': []
+    }
     main()

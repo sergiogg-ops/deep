@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 from time import time
 from re import sub, findall
+from shapely.geometry import Polygon
 from unicodedata import normalize
 from art import aggregators, scores, significance_tests
 from cleanfid import fid
@@ -96,6 +97,25 @@ def get_bwer(x, y):
         global_scr += (scr - dfa) // 2 + dfa
         glob_ref_wl += len(sent_y.split())
     return 100 * global_scr / glob_ref_wl
+
+def get_iou(x, y):
+    '''
+    Compute the IOU score between two lists of bounding boxes.
+    Args:
+        x: list of translated bounding boxes
+        y: list of reference bounding boxes
+    Returns:
+        iou: IOU score
+    '''
+    ious = []
+    for box_x, box_y in zip(x, y[0]):
+        poly_x = Polygon(box_x)
+        poly_y = Polygon(box_y)
+        intersection = poly_x.intersection(poly_y).area
+        union = poly_x.union(poly_y).area
+        iou = intersection / union if union != 0 else 0
+        ious.append(iou)
+    return sum(ious) / len(ious)
 
 def get_beer(x, y):
     '''
@@ -200,5 +220,6 @@ METRICS = {
     'bwer': get_bwer,
     'beer': get_beer,
     'fid': get_fid,
-    'ssim': get_ssim
+    'ssim': get_ssim,
+    'iou': get_iou
 }
