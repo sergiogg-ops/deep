@@ -160,7 +160,7 @@ def parse_moses(file):
     '''
     with open(file,'r') as f:
         segments = f.readlines()
-    return segments
+    return segments, [str(i) for i in range(len(segments))]
 
 def parse_yaml(file):
     '''
@@ -386,7 +386,7 @@ def main():
 if __name__ == "__main__":
     global READ_FUNC
     READ_FUNC = {
-        'mt': parse_yaml,
+        'mt': parse_moses,
         'ocr': parse_yaml,
         'img': read_img_dir,
         't_det': parse_bbox_yaml
