@@ -1,4 +1,4 @@
-import argparse
+from configargparse import ArgumentParser
 import os
 import pandas as pd
 import lxml.etree as ET
@@ -10,11 +10,12 @@ from PIL import Image
 import numpy as np
 
 def read_parameters():
-    parser = argparse.ArgumentParser(description='Evaluates the participant dockerized models. They need to produce the hypotheses of the source file in the same format as the reference(s) file(s).')
-    parser.add_argument('reference', type=str, nargs='+', help='Path to the references file(s)')
+    parser = ArgumentParser(description='Evaluates the participant dockerized models. They need to produce the hypotheses of the source file in the same format as the reference(s) file(s).')
+    parser.add_argument('--config', is_config_file=True, help='Path to the config file with the rest of the parameters')
+    parser.add_argument('--reference', required=True, type=str, nargs='+', help='Path to the references file(s)')
     parser.add_argument('--source', type=str, nargs='+', help='Path to the sources files')
     parser.add_argument('--systems', type=str, help='Path to the directory that contains all the dockerized systems. If provided, the systems will be run and the translations will be evaluated. If not provided, the translations will be read from the dir_preds directory.')
-    parser.add_argument('--dir_preds', type=str, default='translations', help='Name of directory with the translation files')
+    parser.add_argument('--dir_preds', required=True, type=str, default='translations', help='Name of directory with the translation files')
     parser.add_argument('--baselines', type=str, nargs='+', default=[], help='List of baseline systems to be evaluated. Must be included among the rest of the systems')
     parser.add_argument('--output', type=str, default='results.csv', help='Path to the file that will store the leaderboard')
     parser.add_argument('-a','--append', action='store_true', help='Append the results to the output file')
@@ -24,7 +25,7 @@ def read_parameters():
     parser.add_argument('--trials', type=int, default=10000, help='Number of trials for the ART (default: 10000)')
     parser.add_argument('--p_value', type=float, default=0.05, help='P-value for the ART (default: 0.05)')
     parser.add_argument('--task', type=str, required=True, choices=['mt','ocr','img','t_det'], help='Task to be evaluated: mt (machine translation), ocr (optical character recognition), img (image generation), t_det (text detection)')
-    parser.add_argument('--subtask', type=str, required=True, help='Subtask to be evaluated')
+    parser.add_argument('--comment', type=str, help='Some comments about the submission to be included in the leaderboard')
     args = parser.parse_args()
     return args
 

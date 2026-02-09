@@ -23,11 +23,13 @@ python eval.py [reference ...] [options]
 
 ### Arguments
 - `reference`: Path to the references file(s).
+- `--dir_preds`: Directory with the files containing translations.
+- `--task`: Task to evaluate (`mt`, `ocr`, `img`, `t_det`).
 
 **Options:**
+- `--config`: Path to the config file with the rest of the parameters
 - `--source`: Path to the source files.
 - `--systems`: Directory containing dockerized systems. If provided, systems will be run and evaluated.
-- `--dir_preds`: Directory with the files containing translations.
 - `--baselines`: List of baseline systems to evaluate.
 - `--output`: File path to store the leaderboard.
 - `-a`, `--append`: Append results to the output file.
@@ -36,7 +38,6 @@ python eval.py [reference ...] [options]
 - `--ascending`: Sort leaderboard in ascending order.
 - `--trials`: Number of trials for ART (default: 10000).
 - `--p_value`: P-value for ART (default: 0.05).
-- `--task`: Task to evaluate (`mt`, `ocr`, `img`, `t_det`).
 - `--subtask`: Subtask to evaluate.
 
 Each system must be dockerized and prepared to be run appropriately. It must read the `data/source.sgm` file and write the corresponding translations in the `data/predictions.sgm` file of the docker container. The `eval.py` script will read the predictions, store them in a directory, evaluate each one with the specified metrics, and cluster the submissions.
