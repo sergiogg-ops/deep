@@ -12,6 +12,7 @@ from unicodedata import normalize
 from art import aggregators, scores, significance_tests
 from cleanfid import fid
 from skimage.metrics import structural_similarity as ssim
+from nltk.translate import meteor_score
 from PIL import Image
 
 def get_bleu(x, y):
@@ -48,6 +49,18 @@ def get_chrf(x, y):
     '''
     chrf = sacrebleu.corpus_chrf(x, y).score
     return chrf
+
+def get_meteor(x, y):
+    '''
+    Compute the METEOR scorebetweentwo lists of segments
+    Args:
+        x: list of translated segments
+        y: list of reference segments
+    Returns:
+        meteor: METEOR score
+    '''
+    meteor = meteor_score(y, x)
+    return meteor
 
 def get_wer(x, y):
     '''
@@ -215,6 +228,7 @@ def assess_differences(a_scores, b_scores, trials, p_value):
 METRICS = {
     'bleu': get_bleu,
     'ter': get_ter,
+    'meteor': get_meteor,
     'chrf': get_chrf,
     'wer': get_wer,
     'bwer': get_bwer,
