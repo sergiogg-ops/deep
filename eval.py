@@ -8,6 +8,7 @@ from tqdm import tqdm
 from time import time
 from PIL import Image
 import numpy as np
+import json
 
 def read_parameters():
     parser = ArgumentParser(description='Evaluates the participant dockerized models. They need to produce the hypotheses of the source file in the same format as the reference(s) file(s).')
@@ -175,6 +176,20 @@ def parse_yaml(file):
         data = yaml.safe_load(f)
     ids = sorted(data.keys())
     segments = ['\n'.join(data[id]['text']) for id in ids]
+    return segments, ids
+
+def parse_json(file):
+    '''
+    Parse the JSON file and return the segments.
+    Args:
+        file: path to the JSON file
+    Returns:
+        segments: list of segments
+    '''
+    with open(file, 'r') as f:
+        data = json.load(f)
+    ids = [sample['idx'] for sample in data]
+    segments = [sample['text'] for sample in data]
     return segments, ids
 
 def parse_bbox_yaml(file):
@@ -387,7 +402,7 @@ def main():
 if __name__ == "__main__":
     global READ_FUNC
     READ_FUNC = {
-        'mt': parse_moses,
+        'mt': parse_json,
         'ocr': parse_yaml,
         'img': read_img_dir,
         't_det': parse_bbox_yaml
