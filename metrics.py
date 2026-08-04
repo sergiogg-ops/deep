@@ -12,7 +12,7 @@ from unicodedata import normalize
 from art import aggregators, scores, significance_tests
 from cleanfid import fid
 from skimage.metrics import structural_similarity as ssim
-from nltk.translate import meteor_score
+from nltk.translate.meteor_score import meteor_score
 from PIL import Image
 
 def get_bleu(x, y):
