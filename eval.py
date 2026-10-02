@@ -337,22 +337,22 @@ def main():
     models = [f.split('.')[0] for f in predictions]
 
     for preds, model in tqdm(zip(full_preds, models), desc="Evaluating",total=len(models)):
-        #try:
-        global_scores, scores = evaluate(preds, refs, metrics)
-        for k in global_scores.keys():
-            global_scores[k] = [global_scores[k]]
-        if 'beer' in args.metrics:
-            beer, sent_scr = METRICS['beer'](preds, refs)
-            global_scores['beer'] = [beer]
-            scores['beer'] = sent_scr
-        if 'fid' in args.metrics:
-            fid = METRICS['fid'](preds, refs)
-            global_scores['fid'] = [fid]
-        global_scores['metrics'] = [scores] # sentence scores to asses the significance of the differences
-        # except Exception as e:
-        #     global_scores = {k: [None] for k in metrics.keys()}
-        #     global_scores['metrics'] = [{k: [None] for k in metrics.keys()}]
-        #     print(f"Error evaluating {model}: {e}")
+        try:
+            global_scores, scores = evaluate(preds, refs, metrics)
+            for k in global_scores.keys():
+                global_scores[k] = [global_scores[k]]
+            if 'beer' in args.metrics:
+                beer, sent_scr = METRICS['beer'](preds, refs)
+                global_scores['beer'] = [beer]
+                scores['beer'] = sent_scr
+            if 'fid' in args.metrics:
+                fid = METRICS['fid'](preds, refs)
+                global_scores['fid'] = [fid]
+            global_scores['metrics'] = [scores] # sentence scores to asses the significance of the differences
+        except Exception as e:
+            global_scores = {k: [None] for k in metrics.keys()}
+            global_scores['metrics'] = [{k: [None] for k in metrics.keys()}]
+            print(f"Error evaluating {model}: {e}")
         global_scores['name'] = [model]
         global_scores['datetime'] = [pd.Timestamp.now()]
         global_scores['task'] = [args.task]
